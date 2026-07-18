@@ -64,8 +64,8 @@ It refreshes directly from the checked-in Markdown source every two seconds.
 
 ## Status
 
-Layers 0–4 backend work is pushed. Layer 5 FTS5 keyword retrieval is implemented
-and locally verified, with its commit still pending. The real OpenAI proof
-awaits a local API key, while Developer A's macOS display confirmation remains
-open. Live evidence and blockers are tracked in
+Layers 0–5 backend work is pushed. Layer 7 embeddings and hybrid retrieval will
+proceed before the deferred Layer 6 Chrome extension at the user's direction.
+The real OpenAI proof awaits a local API key, while Developer A's macOS display
+confirmation remains open. Live evidence and blockers are tracked in
 [`docs/developer-b-checklist.md`](docs/developer-b-checklist.md).

@@ -6,11 +6,11 @@ Project: Recall
 
 Last updated: 2026-07-18
 
-Current phase: Layer 5 implementation and exit gate verified locally; commit and push pending
+Current phase: Layer 5 pushed; Layer 7 requested before Layer 6; design cross-check next
 
 Current branch: `main`
 
-Last verified Layer 4 implementation commit: `84a0bb7`, pushed to `origin/main`
+Last verified Layer 5 implementation commit: `d34a567`, pushed to `origin/main`
 
 Last baseline cross-check: 2026-07-18 against all sections of
 `docs/product-plan.md`
@@ -47,7 +47,7 @@ Update protocol:
 | 2 | SQLite persistence | Complete | Commit `0622ad0` pushed; 30 tests and restart proof passed |
 | 3 | Capture CRUD and first integration | Backend complete / integration deferred | Commit `17264fe` pushed; D-013 holder awaits Developer A |
 | 4 | OpenAI enrichment | Backend implemented / live proof blocked | 94 tests pass, including release-wheel proof; real Responses API call awaits B-007 |
-| 5 | FTS5 keyword retrieval | Complete locally / delivery pending | 119 tests and provider-off live/restart proof pass; commit and push pending |
+| 5 | FTS5 keyword retrieval | Complete | Commit `d34a567` pushed; 119 tests and provider-off live/restart proof pass |
 | 6 | Chrome capture | Pending | Not started |
 | 7 | Embeddings and hybrid retrieval | Pending | Not started |
 | 8 | Reliability and demo readiness | Pending | Not started |
@@ -582,8 +582,8 @@ Status: `[x]` implementation and exit gate verified locally; delivery pending
 
 ## Delivery
 
-- [ ] Commit the working Layer 5 slice.
-- [ ] Push the working Layer 5 slice.
+- [x] Commit the working Layer 5 slice in `d34a567`.
+- [x] Push the working Layer 5 slice to `origin/main`.
 
 ---
 
