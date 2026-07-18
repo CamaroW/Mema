@@ -49,6 +49,9 @@ Capture source text and optional user note
   checklist, exit gates, validation evidence, and blocker log.
 - [`docs/branch-layout.md`](docs/branch-layout.md): implementation branch tips,
   dependency relationships, and the definition of central files on `main`.
+- [`docs/backend-stress-report-2026-07-18.md`](docs/backend-stress-report-2026-07-18.md):
+  weird-card, bulk, provider, SQLite, and retrieval stress results with every
+  confirmed breakpoint recorded.
 
 ## Planned stack
 
@@ -81,3 +84,7 @@ represented as complete. A validated local `integration/layers-6-7` branch
 combines Developer B's Chrome and retrieval deltas but not Developer A's macOS
 client. Live evidence and blockers are tracked in
 [`docs/developer-b-checklist.md`](docs/developer-b-checklist.md).
+
+The first full backend stress audit is complete on local branch
+`test/backend-stress`: 44 escalated scenarios produced 28 passes and 16
+breaks, grouped into 13 repair items. Production behavior was not changed.

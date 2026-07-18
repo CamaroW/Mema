@@ -31,6 +31,7 @@ below. No existing commit was rewritten or force-updated.
 | `layer/6-chrome-capture` | `d426ca8` | Manifest V3 extension and strict local CORS |
 | `layer/7-hybrid-retrieval` | `faa45d7` | Embeddings and hybrid retrieval |
 | `integration/layers-6-7` | `3389bae` | Validated combined Developer B runtime at backend 0.7.0 |
+| `test/backend-stress` | `0c9a52f` | Reproducible backend stress harness and dated break report |
 | `codex/macos-client` | `12862d3` on `origin` | Developer A's macOS client; left untouched |
 
 The branches are dependency checkpoints, not unrelated orphan trees. Layers
@@ -55,3 +56,8 @@ on a separate integration branch that combines all required implementation.
 The local `integration/layers-6-7` branch combines Developer B's work, but it
 does not yet include Developer A's macOS client and has not been pushed or
 accepted as the final team integration branch.
+
+`test/backend-stress` is based on the Developer B integration branch. It adds
+no production behavior; it contains the destructive-in-temp harness and the
+exact findings summarized on documentation-only `main`. It is local and
+unpushed.

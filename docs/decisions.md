@@ -33,6 +33,7 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-017 | Default-dimension embeddings with per-result FTS fallback | Clarification | Accepted |
 | D-018 | Build-free Manifest V3 Chrome extension | Addition | Accepted |
 | D-019 | Documentation-only main with stacked layer branches | Addition | Accepted by user direction |
+| D-020 | Deterministic destructive-in-temp backend stress harness | Addition | Accepted by user direction |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -381,6 +382,25 @@ The exact branch tips and definition of central files are recorded in
 product-plan workflow rule that `main` stay runnable. It does not waive the
 Layer 8 and final demo integration gates: the team must agree on a runnable
 integration location before those gates can close.
+
+## D-020 — Deterministic destructive-in-temp backend stress harness
+
+- Classification: Addition / engineering verification
+- Status: Accepted by explicit user direction
+- Product impact: None; this decision adds tests and records defects only
+- Schedule impact: Layer 8 now has thirteen grouped backend repair items
+
+The backend stress audit runs from `test/backend-stress` against disposable
+SQLite databases and deterministic local provider doubles. It must not use a
+real OpenAI credential, personal Capture data, or the user's normal database.
+One failure must not stop the remaining scenarios, and the report must preserve
+every observed error, limitation, performance threshold, and untested gate.
+
+The interaction thresholds used by the first audit—one second for one local
+realistic-vector search, two seconds for the small-vector concurrent case, and
+five seconds for the realistic-vector concurrent case—are provisional test
+guardrails, not a public service-level agreement. The harness and results are
+recorded in [`backend-stress-report-2026-07-18.md`](backend-stress-report-2026-07-18.md).
 
 ## Pending decisions
 

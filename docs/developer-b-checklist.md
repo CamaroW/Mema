@@ -6,7 +6,7 @@ Project: Recall
 
 Last updated: 2026-07-18
 
-Current phase: layer branches created locally; documentation-only main awaiting review/push
+Current phase: backend stress audit complete; thirteen grouped repair items open
 
 Current branch: `main`
 
@@ -14,7 +14,7 @@ Last verified Layer 5 implementation commit: `d34a567`, pushed to `origin/main`
 
 Branch map: `docs/branch-layout.md`; Layer 6 commit `d426ca8`; Layer 7 commit
 `faa45d7`; combined integration commit `3389bae`; none of the new branches is
-pushed yet
+pushed yet. Stress harness/report commit: `0c9a52f` on `test/backend-stress`
 
 Last baseline cross-check: 2026-07-18 against all sections of
 `docs/product-plan.md`
@@ -54,7 +54,7 @@ Update protocol:
 | 5 | FTS5 keyword retrieval | Complete | Commit `d34a567` pushed; 119 tests and provider-off live/restart proof pass |
 | 6 | Chrome capture | Implemented / manual gate open | Isolated branch `d426ca8`: 13 extension and 128 backend tests pass; B-009 remains |
 | 7 | Embeddings and hybrid retrieval | Backend implemented / live proof blocked | Isolated branch `faa45d7`: 156 backend tests pass; live embedding call awaits B-008 |
-| 8 | Reliability and demo readiness | Pending | Not started |
+| 8 | Reliability and demo readiness | In progress / stress breaks open | 44 stress scenarios completed; 13 grouped breakpoints recorded under B-011 |
 | 9 | Optional Apple on-device path | Gated | Decision D-008 accepted; prerequisites unmet |
 | 10 | Final freeze and submission | Pending | Not started |
 
@@ -63,7 +63,9 @@ B-009 holds the real unpacked-Chrome/macOS gate, B-008 prevents live
 embedding-model proof, B-007 prevents the real Layer 4 provider proof, and
 B-006 remains Developer A's shared macOS gate. B-010 blocks claiming a complete
 Layer 8 integration while `main` is documentation-only and the local Developer
-B integration branch does not include Developer A's macOS client.
+B integration branch does not include Developer A's macOS client. B-011 blocks
+Layer 8 completion until the recorded backend stress failures are triaged and
+the demo-critical items are repaired.
 
 ## Scope, schedule, and collaboration guardrails
 
@@ -768,7 +770,30 @@ Chrome selection
 
 # Layer 8 — Reliability and demo readiness
 
-Status: `[ ]` pending
+Status: `[~]` stress audit complete; remediation pending
+
+## Backend stress audit
+
+- [x] Run the existing integrated backend suite before stress: all 165 tests
+  passed.
+- [x] Exercise weird, Unicode, prompt-injection, SQL-looking, NUL, oversized,
+  duplicate, ambiguous, and conflicting context cards.
+- [x] Exercise 1,000 bulk writes, including 500 posts with 64 workers and 200
+  with 32 workers; no lock error occurred, Capture/FTS counts matched, SQLite
+  integrity passed, and restart retrieval worked.
+- [x] Exercise provider-invalid output, extreme finite vectors, corrupted JSON,
+  CORS, provider-off retrieval, 1,005-card semantic scans, and 500 stored
+  1,536-dimension vectors.
+- [!] The escalated 67.025-second run completed 44 scenarios with 28 passes and
+  16 breaks, grouped as ST-001 through ST-013 under B-011.
+- [x] Record exact reproduction, impact, limitations, passed cases, and repair
+  order in `docs/backend-stress-report-2026-07-18.md`.
+- [x] Commit the harness and branch-local backend instructions as `0c9a52f` on
+  `test/backend-stress`.
+- [ ] Push the stress branch and documentation-only `main` after review.
+
+No production fix was made during the audit; the user requested discovery and
+recording first.
 
 ## Build tasks
 
@@ -816,10 +841,15 @@ Status: `[ ]` pending
 - [ ] OpenAI key missing.
 - [ ] Model unavailable.
 - [ ] Enrichment timeout/refusal/invalid output.
-- [ ] Embedding failure.
+- [!] Provider-invalid output: ST-009 and ST-010 reproduce empty-ready and
+  permanently-processing states.
+- [!] Embedding failure: ST-012 reproduces an overflow-triggered search 500.
 - [ ] Chrome extension cannot reach backend.
 - [ ] Backend restart during processing.
 - [ ] macOS app restarts after data creation.
+- [!] Oversized request/provider output: ST-001 and ST-011.
+- [!] NUL and unbounded search queries: ST-006 and ST-007.
+- [!] Concurrent semantic-search latency: ST-008.
 
 ## Exit gate
 
@@ -1082,6 +1112,26 @@ Use IDs `B-###`. Never delete an entry; append resolution and date.
 - Does it block the branch separation? No. It blocks claiming `main` is runnable
   and therefore blocks the Layer 8/final integrated-demo gate.
 
+## B-011 — Backend stress audit found thirteen grouped breakpoints
+
+- Opened: 2026-07-18
+- Severity: Reliability / Layer 8 blocker
+- Status: Open; no production fix was authorized or applied in the audit
+- Evidence: `docs/backend-stress-report-2026-07-18.md`, harness commit
+  `0c9a52f`, and an escalated 44-scenario run with 28 passes and 16 breaks.
+- High-priority failures: NUL query returns 500; invalid provider output can
+  become empty-ready or permanently processing; finite extreme vectors overflow
+  cosine search; client/provider data is unbounded; concurrent full-vector scans
+  reach 8.9–17.7 seconds.
+- Medium/low failures: duplicate client IDs, strict-boolean contract drift,
+  malformed-byte envelope drift, natural provider-off query misses, unbounded
+  echoed query, and health blindness to corrupt row JSON.
+- Resolution needed: triage ST-001 through ST-013 in the report, repair at least
+  the demo-critical lifecycle/crash/resource items, add regression tests, and
+  rerun the same harness before closing Layer 8.
+- Does it block Layer 8? Yes. It does not invalidate the passing 165-test
+  baseline or the successful 1,000-write durability result.
+
 # Errors encountered
 
 Use IDs `E-###`. Record the original symptom and the resolution. Do not erase
@@ -1168,6 +1218,30 @@ resolved errors.
   blind direct merge.
 - Project impact: No code loss and no test regression. Final team integration
   still requires Developer A's macOS branch under B-010.
+
+## E-031 — First stress-harness launch could not import the backend
+
+- Date: 2026-07-18
+- Status: Resolved 2026-07-18
+- Symptom: The first direct command exited before any scenario with
+  `ModuleNotFoundError: No module named 'app'`.
+- Cause: Python placed `services/backend/tools/`, not `services/backend/`, on
+  `sys.path` for a directly executed script.
+- Resolution: The entry point now resolves and inserts its backend root. The
+  same direct command compiled and completed both full runs.
+- Project impact: No scenario or product database ran before the failure.
+
+## E-032 — First stress output expanded the complete oversized query
+
+- Date: 2026-07-18
+- Status: Resolved 2026-07-18
+- Symptom: The first completed run recorded 29 passes and 11 breaks, but the
+  structured console evidence echoed all 2,000 terms and obscured later output.
+- Resolution: Record query length plus an 80-character preview, suppress only
+  expected application stack traces, add the escalated cases, and rerun. The
+  second run completed 44 scenarios with compact evidence.
+- Project impact: Reporting clarity only; no application failure was hidden or
+  removed from the dated report.
 
 ## E-001 — Official OpenAI docs MCP could not initially install
 
