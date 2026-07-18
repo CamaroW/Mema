@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Query, Request, Response, status
+from fastapi import BackgroundTasks, Depends, FastAPI, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -28,7 +28,17 @@ from app.database import (
     apply_migrations,
     database_schema_is_current,
 )
-from app.repository import CaptureRepository
+from app.enrichment import (
+    EnrichmentProvider,
+    EnrichmentService,
+    OpenAIEnrichmentProvider,
+    mark_enrichment_not_configured,
+)
+from app.repository import (
+    CaptureAlreadyProcessingError,
+    CaptureNotFoundError,
+    CaptureRepository,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -67,12 +77,22 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Recall Backend", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Recall Backend", version="0.4.0", lifespan=lifespan)
 
 
 def get_repository() -> CaptureRepository:
     settings = get_settings()
     return CaptureRepository(settings.recall_database_path, initialize=False)
+
+
+def get_enrichment_provider() -> EnrichmentProvider | None:
+    settings = get_settings()
+    if not settings.openai_configured or settings.openai_api_key is None:
+        return None
+    return OpenAIEnrichmentProvider(
+        api_key=settings.openai_api_key.get_secret_value(),
+        model=settings.openai_model,
+    )
 
 
 @app.exception_handler(RequestValidationError)
@@ -133,10 +153,26 @@ def checklist_data() -> JSONResponse:
     status_code=status.HTTP_202_ACCEPTED,
 )
 def create_capture(
+    background_tasks: BackgroundTasks,
     request: CaptureCreateRequest,
     repository: Annotated[CaptureRepository, Depends(get_repository)],
+    provider: Annotated[
+        EnrichmentProvider | None,
+        Depends(get_enrichment_provider),
+    ],
 ) -> CaptureResponse:
     record = repository.create(request.to_storage_model(), status="processing")
+    if provider is None:
+        background_tasks.add_task(
+            mark_enrichment_not_configured,
+            repository,
+            record.id,
+        )
+    else:
+        background_tasks.add_task(
+            EnrichmentService(repository, provider).run,
+            record.id,
+        )
     return CaptureResponse.from_record(record)
 
 
@@ -152,6 +188,54 @@ def list_captures(
         limit=limit,
         offset=offset,
     )
+
+
+@app.post(
+    "/v1/captures/{capture_id}/enrich",
+    response_model=CaptureResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ErrorEnvelope},
+        status.HTTP_409_CONFLICT: {"model": ErrorEnvelope},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorEnvelope},
+    },
+)
+def enrich_capture(
+    capture_id: UUID,
+    background_tasks: BackgroundTasks,
+    repository: Annotated[CaptureRepository, Depends(get_repository)],
+    provider: Annotated[
+        EnrichmentProvider | None,
+        Depends(get_enrichment_provider),
+    ],
+) -> CaptureResponse | JSONResponse:
+    if provider is None:
+        return error_response(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="openai_not_configured",
+            message="OpenAI enrichment is not configured.",
+        )
+
+    try:
+        record = repository.claim_enrichment(str(capture_id))
+    except CaptureNotFoundError:
+        return error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="capture_not_found",
+            message="Capture was not found.",
+        )
+    except CaptureAlreadyProcessingError:
+        return error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="capture_already_processing",
+            message="Capture enrichment is already processing.",
+        )
+
+    background_tasks.add_task(
+        EnrichmentService(repository, provider).run,
+        record.id,
+    )
+    return CaptureResponse.from_record(record)
 
 
 @app.get(

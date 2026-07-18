@@ -64,6 +64,8 @@ It refreshes directly from the checked-in Markdown source every two seconds.
 
 ## Status
 
-Layers 0–2 are complete. The Layer 3 backend CRUD portion is implemented and
-awaiting Developer A's macOS display confirmation; live evidence and blockers
-are tracked in [`docs/developer-b-checklist.md`](docs/developer-b-checklist.md).
+Layers 0–3 backend work is committed. Layer 4 enrichment is implemented and
+deterministically tested; its real OpenAI proof awaits a local API key, while
+Developer A's macOS display confirmation remains open. Live evidence and
+blockers are tracked in
+[`docs/developer-b-checklist.md`](docs/developer-b-checklist.md).

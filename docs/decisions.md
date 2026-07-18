@@ -27,6 +27,7 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-011 | Numbered SQL migrations with the Python standard library | Addition | Accepted |
 | D-012 | Local live build-checklist dashboard | Addition | Accepted |
 | D-013 | Proceed past Layer 3 with a documented macOS integration holder | Addition | Accepted with open gate |
+| D-014 | In-process enrichment tasks with an explicit retry endpoint | Clarification | Accepted |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -238,8 +239,30 @@ The placeholder is not an exit-gate substitute. Developer A must still display
 the live Capture, preserve source/user-note separation, and remove or supersede
 the holder before the shared Layer 3 gate can be marked complete.
 
+## D-014 — In-process enrichment tasks with an explicit retry endpoint
+
+- Classification: Clarification / implementation choice
+- Status: Accepted
+- Product impact: Implements the baseline asynchronous enrichment lifecycle
+- Schedule impact: Low
+
+Layer 4 uses FastAPI `BackgroundTasks` after the original Capture transaction
+commits. `POST /v1/captures` still returns the required `processing` response;
+the background task stores either the validated AI interpretation or a safe
+`error` state without modifying the source or user note.
+
+`POST /v1/captures/{id}/enrich` provides explicit retry behavior. The repository
+claims retries with a transactional status comparison so two requests cannot
+start enrichment for the same Capture concurrently. Clients poll the detail
+endpoint every one to two seconds, stop on `ready` or `error`, and cap polling
+at approximately 60 seconds. No WebSocket, Redis, Celery, or durable queue is
+added for P0.
+
+An abrupt process exit can still leave an in-process task unfinished. Automatic
+stale-processing recovery remains a documented post-MVP safeguard unless it
+becomes necessary for demo reliability.
+
 ## Pending decisions
 
-Model snapshots, embedding dimensions, background-task mechanism, and the exact
-provider-metadata fields remain implementation-layer decisions and must not be
-silently fixed here.
+Model snapshots, embedding dimensions, and the exact provider-metadata fields
+remain implementation-layer decisions and must not be silently fixed here.

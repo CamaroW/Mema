@@ -1,6 +1,6 @@
 # Developer A backend handoff
 
-Status: Layer 3 backend ready for macOS integration
+Status: Layer 3 holder pending; Layer 4 polling contract available
 
 Last verified: 2026-07-18
 
@@ -11,6 +11,7 @@ Last verified: 2026-07-18
 - Create: `POST /v1/captures`
 - List: `GET /v1/captures?limit=50&offset=0`
 - Detail: `GET /v1/captures/{id}`
+- Retry enrichment: `POST /v1/captures/{id}/enrich`
 - Shared response contract: `contracts/api.md`
 
 Start the backend from `services/backend/`:
@@ -51,9 +52,11 @@ and list GET.
 - Decode list responses from the `items` array; `limit` and `offset` are
   returned beside it.
 - Render source, surrounding context, and `user_note` independently.
-- Show `processing` immediately after creation.
-- Do not wait for AI fields in this integration pass. They remain null/empty
-  until Developer B completes Layer 4 enrichment.
+- Show `processing` immediately after creation, then poll detail every one to
+  two seconds until `ready` or `error`, with an approximately 60-second cap.
+- When status becomes `ready`, render the AI interpretation separately from the
+  original source and user note. When it becomes `error`, retain the raw card
+  and offer retry through `POST /v1/captures/{id}/enrich`.
 - Display the stable error `message`, but branch behavior on the error `code`.
 - Preserve `context_truncated` in Swift request and response models.
 

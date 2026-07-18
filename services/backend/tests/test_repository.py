@@ -8,7 +8,11 @@ import pytest
 
 from app.database import database_connection
 from app.models import EnrichmentUpdate, NewCapture
-from app.repository import CaptureNotFoundError, CaptureRepository
+from app.repository import (
+    CaptureAlreadyProcessingError,
+    CaptureNotFoundError,
+    CaptureRepository,
+)
 
 
 def new_capture(**overrides: object) -> NewCapture:
@@ -193,3 +197,74 @@ def test_missing_capture_update_rolls_back(tmp_path: Path) -> None:
             "missing",
             EnrichmentUpdate(status="error", error_message="not found"),
         )
+
+
+def test_claim_enrichment_atomically_moves_error_to_processing(tmp_path: Path) -> None:
+    repository = CaptureRepository(tmp_path / "recall.db")
+    created = repository.create(new_capture(), status="error")
+    repository.update_enrichment(
+        created.id,
+        EnrichmentUpdate(status="error", error_message="retry me"),
+    )
+
+    claimed = repository.claim_enrichment(created.id)
+
+    assert claimed.status == "processing"
+    assert claimed.error_message is None
+    assert claimed.selected_text == created.selected_text
+    assert claimed.user_note == created.user_note
+
+
+def test_claim_enrichment_clears_generated_fields_from_ready_capture(
+    tmp_path: Path,
+) -> None:
+    repository = CaptureRepository(tmp_path / "recall.db")
+    created = repository.create(new_capture(), status="processing")
+    repository.update_enrichment(
+        created.id,
+        EnrichmentUpdate(
+            status="ready",
+            ai_title="Old generated title",
+            ai_summary="Old generated summary",
+            problem="Old problem",
+            key_insight="Old insight",
+            why_saved="Old reason",
+            caveats=["Old caveat"],
+            tags=["old-tag"],
+            entities=["Old Entity"],
+            search_aliases=["old alias"],
+            embedding=[0.25, -0.5],
+        ),
+    )
+
+    claimed = repository.claim_enrichment(created.id)
+
+    assert claimed.status == "processing"
+    assert claimed.ai_title is None
+    assert claimed.ai_summary is None
+    assert claimed.problem is None
+    assert claimed.key_insight is None
+    assert claimed.why_saved is None
+    assert claimed.caveats == []
+    assert claimed.tags == []
+    assert claimed.entities == []
+    assert claimed.search_aliases == []
+    assert claimed.embedding is None
+    assert claimed.error_message is None
+    assert claimed.selected_text == created.selected_text
+    assert claimed.user_note == created.user_note
+
+
+def test_claim_enrichment_rejects_concurrent_processing(tmp_path: Path) -> None:
+    repository = CaptureRepository(tmp_path / "recall.db")
+    created = repository.create(new_capture(), status="processing")
+
+    with pytest.raises(CaptureAlreadyProcessingError):
+        repository.claim_enrichment(created.id)
+
+
+def test_claim_enrichment_reports_missing_capture(tmp_path: Path) -> None:
+    repository = CaptureRepository(tmp_path / "recall.db")
+
+    with pytest.raises(CaptureNotFoundError):
+        repository.claim_enrichment("missing")

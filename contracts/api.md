@@ -237,6 +237,13 @@ Queues or starts a new enrichment attempt without changing original fields.
 - Already processing: `409 Conflict`
 - OpenAI not configured: `503 Service Unavailable`
 
+### Enrichment polling
+
+After either `202 Accepted` response, clients poll
+`GET /v1/captures/{id}` every one to two seconds. Polling stops when status is
+`ready` or `error` and should time out after approximately 60 seconds. The P0
+contract does not use WebSockets.
+
 ### `GET /v1/search?q={query}&limit=20`
 
 - Success: `200 OK`

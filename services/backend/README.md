@@ -83,6 +83,36 @@ curl 'http://127.0.0.1:8765/v1/captures?limit=50&offset=0'
 Validation failures and unknown Capture IDs use the versioned error envelope
 in `contracts/api.md`.
 
+## AI enrichment
+
+Layer 4 starts one in-process enrichment task after a Capture is committed.
+The task uses the configured `OPENAI_MODEL`, sends the product-plan §11.5/§11.6
+prompts through the Responses API, and requests strict Structured Outputs using
+the contract in `contracts/enriched_capture.schema.json`. An identical packaged
+copy under `app/schemas/` keeps wheel installations self-contained; an automated
+wheel smoke test prevents the two checked-in copies from drifting.
+
+Provider calls use a 45-second timeout with SDK retries disabled so one attempt
+cannot outlive the approximately 60-second client polling window. Responses
+must report `completed`; incomplete results are stored as a safe retryable
+provider error rather than accepted as ready data.
+
+If OpenAI is not configured, creation still returns the persisted `processing`
+representation and the background task moves the stored Capture to a visible
+`error` state without changing source content. After configuring the untracked
+root `.env`, retry a failed Capture with:
+
+```bash
+curl --request POST http://127.0.0.1:8765/v1/captures/{id}/enrich
+```
+
+The retry response is HTTP `202`. Poll the detail route every one to two seconds
+until status becomes `ready` or `error`, stopping after approximately 60 seconds.
+Concurrent attempts return the stable `capture_already_processing` error.
+
+The P0 runner is deliberately in-process. It does not add Redis, Celery,
+WebSockets, or a durable queue; see decision D-014.
+
 ## Test
 
 ```bash

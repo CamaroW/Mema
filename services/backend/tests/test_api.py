@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 
 from app.api_models import CaptureCreateRequest, CaptureResponse
 from app.config import REPOSITORY_ROOT, get_settings
-from app.main import app, get_repository
+from app.enrichment import (
+    EnrichmentPayload,
+    EnrichmentProviderError,
+)
+from app.main import app, get_enrichment_provider, get_repository
 from app.models import NewCapture
 from app.repository import CaptureRepository
 
@@ -27,12 +31,28 @@ def api_client(
     get_settings.cache_clear()
     with TestClient(app) as client:
         yield client, database_path
+    app.dependency_overrides.pop(get_enrichment_provider, None)
     get_settings.cache_clear()
 
 
 def fixture_request() -> dict[str, object]:
     path = REPOSITORY_ROOT / "contracts" / "examples" / "capture-request.json"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def fixture_enrichment() -> EnrichmentPayload:
+    path = REPOSITORY_ROOT / "contracts" / "examples" / "enrichment-output.json"
+    return EnrichmentPayload.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+class SuccessfulProvider:
+    def enrich(self, _capture) -> EnrichmentPayload:
+        return fixture_enrichment()
+
+
+class FailedProvider:
+    def enrich(self, _capture) -> EnrichmentPayload:
+        raise EnrichmentProviderError from RuntimeError("private provider trace")
 
 
 def test_api_models_match_checked_in_contract_fields() -> None:
@@ -90,7 +110,11 @@ def test_valid_web_capture_returns_202_and_can_be_read(
     loaded_response = client.get(f"/v1/captures/{created['id']}")
 
     assert loaded_response.status_code == 200
-    assert loaded_response.json() == created
+    loaded = loaded_response.json()
+    assert loaded["status"] == "error"
+    assert loaded["error_message"] == "AI enrichment is not configured."
+    assert loaded["selected_text"] == created["selected_text"]
+    assert loaded["user_note"] == created["user_note"]
 
 
 def test_clipboard_capture_without_url_succeeds(
@@ -110,6 +134,136 @@ def test_clipboard_capture_without_url_succeeds(
     assert response.status_code == 202
     assert response.json()["source_url"] is None
     assert response.json()["source_title"] is None
+
+
+def test_configured_provider_enriches_capture_after_create(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, _ = api_client
+    app.dependency_overrides[get_enrichment_provider] = SuccessfulProvider
+
+    created_response = client.post("/v1/captures", json=fixture_request())
+    created = created_response.json()
+    loaded = client.get(f"/v1/captures/{created['id']}").json()
+
+    assert created_response.status_code == 202
+    assert created["status"] == "processing"
+    assert loaded["status"] == "ready"
+    assert loaded["ai_title"] == fixture_enrichment().title
+    assert loaded["tags"] == fixture_enrichment().tags
+    assert loaded["selected_text"] == created["selected_text"]
+    assert loaded["user_note"] == created["user_note"]
+
+
+def test_missing_key_rejects_manual_enrichment_with_stable_error(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, _ = api_client
+    created = client.post("/v1/captures", json=fixture_request()).json()
+
+    response = client.post(f"/v1/captures/{created['id']}/enrich")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "openai_not_configured"
+    assert "OPENAI_API_KEY" not in response.text
+
+
+def test_manual_retry_succeeds_without_modifying_source(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, _ = api_client
+    created = client.post("/v1/captures", json=fixture_request()).json()
+    before_retry = client.get(f"/v1/captures/{created['id']}").json()
+    app.dependency_overrides[get_enrichment_provider] = SuccessfulProvider
+
+    retry_response = client.post(f"/v1/captures/{created['id']}/enrich")
+    loaded = client.get(f"/v1/captures/{created['id']}").json()
+
+    assert before_retry["status"] == "error"
+    assert retry_response.status_code == 202
+    assert retry_response.json()["status"] == "processing"
+    assert loaded["status"] == "ready"
+    assert loaded["selected_text"] == before_retry["selected_text"]
+    assert loaded["surrounding_context"] == before_retry["surrounding_context"]
+    assert loaded["user_note"] == before_retry["user_note"]
+
+
+def test_manual_retry_of_ready_capture_returns_clean_processing_state(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, _ = api_client
+    app.dependency_overrides[get_enrichment_provider] = SuccessfulProvider
+    created = client.post("/v1/captures", json=fixture_request()).json()
+    ready = client.get(f"/v1/captures/{created['id']}").json()
+
+    retry_response = client.post(f"/v1/captures/{created['id']}/enrich")
+    processing = retry_response.json()
+
+    assert ready["status"] == "ready"
+    assert ready["ai_title"] is not None
+    assert retry_response.status_code == 202
+    assert processing["status"] == "processing"
+    assert processing["ai_title"] is None
+    assert processing["ai_summary"] is None
+    assert processing["problem"] is None
+    assert processing["key_insight"] is None
+    assert processing["why_saved"] is None
+    assert processing["caveats"] == []
+    assert processing["tags"] == []
+    assert processing["entities"] == []
+    assert processing["search_aliases"] == []
+    assert processing["error_message"] is None
+    assert processing["selected_text"] == ready["selected_text"]
+    assert processing["user_note"] == ready["user_note"]
+
+
+def test_concurrent_enrichment_is_rejected(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, database_path = api_client
+    repository = CaptureRepository(database_path, initialize=False)
+    capture = repository.create(
+        NewCapture(
+            captured_at="2026-07-18T19:00:00Z",
+            source_type="clipboard",
+            selected_text="already processing",
+        ),
+        status="processing",
+    )
+    app.dependency_overrides[get_enrichment_provider] = SuccessfulProvider
+
+    response = client.post(f"/v1/captures/{capture.id}/enrich")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "capture_already_processing"
+
+
+def test_unknown_capture_enrichment_returns_404(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, _ = api_client
+    app.dependency_overrides[get_enrichment_provider] = SuccessfulProvider
+
+    response = client.post(f"/v1/captures/{uuid4()}/enrich")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "capture_not_found"
+
+
+def test_provider_failure_is_persisted_without_private_trace(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, _ = api_client
+    app.dependency_overrides[get_enrichment_provider] = FailedProvider
+
+    created = client.post("/v1/captures", json=fixture_request()).json()
+    loaded = client.get(f"/v1/captures/{created['id']}").json()
+
+    assert loaded["status"] == "error"
+    assert loaded["error_message"] == (
+        "AI enrichment could not be completed. Retry later."
+    )
+    assert "private provider trace" not in loaded["error_message"]
 
 
 @pytest.mark.parametrize("user_note", ["", "长备注" * 20_000])

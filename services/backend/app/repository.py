@@ -26,6 +26,10 @@ class CaptureNotFoundError(LookupError):
     """Raised when an update targets a missing Capture."""
 
 
+class CaptureAlreadyProcessingError(RuntimeError):
+    """Raised when an enrichment claim targets an active Capture."""
+
+
 class CorruptCaptureError(RuntimeError):
     """Raised when persisted JSON cannot be decoded into the storage contract."""
 
@@ -183,6 +187,40 @@ class CaptureRepository:
                 (limit, offset),
             ).fetchall()
         return [_row_to_record(row) for row in rows]
+
+    def claim_enrichment(self, capture_id: str) -> CaptureRecord:
+        """Atomically move a non-processing Capture into processing state."""
+
+        updated_at = self._timestamp()
+        with database_connection(self.database_path) as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    """
+                    UPDATE captures
+                    SET status = 'processing', updated_at = ?,
+                        ai_title = NULL, ai_summary = NULL, problem = NULL,
+                        key_insight = NULL, why_saved = NULL,
+                        caveats_json = '[]', tags_json = '[]',
+                        entities_json = '[]', search_aliases_json = '[]',
+                        embedding_json = NULL, error_message = NULL
+                    WHERE id = ? AND status != 'processing'
+                    """,
+                    (updated_at, capture_id),
+                )
+                row = connection.execute(
+                    "SELECT * FROM captures WHERE id = ?", (capture_id,)
+                ).fetchone()
+                if row is None:
+                    raise CaptureNotFoundError(capture_id)
+                if cursor.rowcount != 1:
+                    raise CaptureAlreadyProcessingError(capture_id)
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+
+        return _row_to_record(row)
 
     def update_enrichment(
         self,

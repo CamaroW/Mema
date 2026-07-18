@@ -6,11 +6,12 @@ Project: Recall
 
 Last updated: 2026-07-18
 
-Current phase: Layer 3 backend verified; macOS holder documented; Layer 4 is next
+Current phase: Layer 4 committed locally and verified; push pending; live OpenAI proof blocked by B-007
 
 Current branch: `main`
 
-Last verified commit: `0622ad0`
+Last verified origin commit: `17264fe`; verified Layer 4 work is the current
+local `HEAD` and remains unpushed
 
 Last baseline cross-check: 2026-07-18 against all sections of
 `docs/product-plan.md`
@@ -45,8 +46,8 @@ Update protocol:
 | 0 | Contracts and documentation | Complete | Schemas and fixtures validated; commit `e75f783` pushed |
 | 1 | Backend foundation | Complete | 11 tests passed; live `/health` returned contracted `200` response |
 | 2 | SQLite persistence | Complete | Commit `0622ad0` pushed; 30 tests and restart proof passed |
-| 3 | Capture CRUD and first integration | Backend complete / integration deferred | 55 tests and live POST/SQLite/GET/list proof passed; D-013 holder awaits Developer A |
-| 4 | OpenAI enrichment | Pending | Not started |
+| 3 | Capture CRUD and first integration | Backend complete / integration deferred | Commit `17264fe` pushed; D-013 holder awaits Developer A |
+| 4 | OpenAI enrichment | Backend implemented / live proof blocked | 94 tests pass, including release-wheel proof; real Responses API call awaits B-007 |
 | 5 | FTS5 keyword retrieval | Pending | Not started |
 | 6 | Chrome capture | Pending | Not started |
 | 7 | Embeddings and hybrid retrieval | Pending | Not started |
@@ -383,77 +384,114 @@ curl POST Capture
 
 # Layer 4 — OpenAI enrichment
 
-Status: `[ ]` pending
+Status: `[~]` backend implemented and tested; live provider exit gate blocked
 
 ## Prerequisites
 
-- [ ] Confirm `OPENAI_API_KEY` is available without committing it.
-- [ ] Confirm the configured GPT-5.6 model is accessible to the project.
-- [ ] Choose and record the background-execution mechanism.
-- [ ] Agree with Developer A on baseline polling: every 1–2 seconds, stop on
-  `ready`/`error`, and cap polling at roughly 30–60 seconds. Do not add
-  WebSockets for P0.
+- [!] Confirm `OPENAI_API_KEY` is available without committing it. Missing in
+  the current runtime; see B-007.
+- [!] Confirm the configured GPT-5.6 model is accessible to the project. Live
+  access cannot be checked without the key; see B-007.
+- [x] Choose and record the background-execution mechanism. D-014 uses FastAPI
+  `BackgroundTasks` plus the explicit retry endpoint.
+- [D] Agree with Developer A on baseline polling: every 1–2 seconds, stop on
+  `ready`/`error`, and cap polling at roughly 30–60 seconds. The contract is
+  documented; Developer A confirmation remains deferred under D-013/B-006.
 
 ## Build tasks
 
-- [ ] Keep OpenAI calls behind a small enrichment service boundary. Do not build
+- [x] Keep OpenAI calls behind a small enrichment service boundary. Do not build
   a generalized provider/plugin system in P0; only preserve a clean seam for
   the separately gated D-008 experiment.
-- [ ] Keep the model name in environment configuration only.
-- [ ] Build the system instructions from product-plan §11.5.
-- [ ] Build the user input from product-plan §11.6.
-- [ ] Send only source type/app, page title, URL/domain, selected text, limited
+- [x] Keep the model name in environment configuration only.
+- [x] Build the system instructions from product-plan §11.5.
+- [x] Build the user input from product-plan §11.6.
+- [x] Send only source type/app, page title, URL/domain, selected text, limited
   surrounding context, and user note—never full page HTML.
-- [ ] Normalize inputs without modifying persisted originals.
-- [ ] Preserve the complete user note.
-- [ ] Enforce the selected/context length rules.
-- [ ] Use one Responses API request per enrichment.
-- [ ] Use strict Structured Outputs with
+- [x] Normalize inputs without modifying persisted originals.
+- [x] Preserve the complete user note.
+- [x] Enforce the selected/context length rules.
+- [x] Use one Responses API request per enrichment.
+- [x] Use strict Structured Outputs with
   `contracts/enriched_capture.schema.json`.
-- [ ] Treat refusal detection and semantic non-empty checks as small reliability
+- [x] Treat refusal detection and semantic non-empty checks as small reliability
   safeguards; do not redesign the baseline schema around them.
-- [ ] Map `title → ai_title` and `summary → ai_summary` explicitly.
-- [ ] Store all enrichment fields in one transaction.
-- [ ] Implement `POST /v1/captures/{id}/enrich`.
-- [ ] Reject concurrent enrichment with the documented `409` response.
-- [ ] Persist a safe `error_message`; never expose credentials or raw provider
+- [x] Map `title → ai_title` and `summary → ai_summary` explicitly.
+- [x] Store all enrichment fields in one transaction.
+- [x] Implement `POST /v1/captures/{id}/enrich`.
+- [x] Reject concurrent enrichment with the documented `409` response.
+- [x] Persist a safe `error_message`; never expose credentials or raw provider
   traces to clients.
-- [ ] Increment and persist `enrichment_version` when prompts or projections
-  change incompatibly.
+- [x] Persist `enrichment_version=1`; incompatible future prompt or projection
+  changes must increment it before release.
 
 ## Prompt-quality requirements
 
-- [ ] Distinguish source facts, explicit user context, and cautious inference.
-- [ ] Do not invent technical details.
-- [ ] Do not claim a saved method worked unless the user note says it worked.
-- [ ] Preserve exact error codes, commands, product names, APIs, libraries, and
+- [x] Distinguish source facts, explicit user context, and cautious inference.
+- [x] Do not invent technical details.
+- [x] Do not claim a saved method worked unless the user note says it worked.
+- [x] Preserve exact error codes, commands, product names, APIs, libraries, and
   technical entities.
-- [ ] Make `why_saved` primarily grounded in the user note; acknowledge when no
+- [x] Make `why_saved` primarily grounded in the user note; acknowledge when no
   personal reason was supplied.
-- [ ] Use the language most appropriate to the note and captured content.
-- [ ] Reject generic titles such as “Interesting Note,” “Linux Information,” or
+- [x] Use the language most appropriate to the note and captured content.
+- [x] Reject generic titles such as “Interesting Note,” “Linux Information,” or
   “A Useful Solution.”
-- [ ] Ensure the summary reflects the user's situation rather than merely
+- [x] Ensure the summary reflects the user's situation rather than merely
   summarizing the source.
 
 ## Required test fixtures
 
-- [ ] Stack Overflow-style technical solution.
-- [ ] General article insight.
-- [ ] Exact error code, command, or file path.
-- [ ] English source with Chinese user note.
-- [ ] Capture with no user note.
-- [ ] Long but valid context.
+- [x] Stack Overflow-style technical solution.
+- [x] General article insight.
+- [x] Exact error code, command, or file path.
+- [x] English source with Chinese user note.
+- [x] Capture with no user note.
+- [x] Long but valid context.
 
 ## Failure tests
 
-- [ ] Missing API key.
-- [ ] Unavailable or unauthorized model.
-- [ ] Timeout or connection failure.
-- [ ] Refusal.
-- [ ] Structurally invalid output.
-- [ ] Semantically empty output.
-- [ ] Retry succeeds without duplicating or modifying source data.
+- [x] Missing API key.
+- [x] Unavailable or unauthorized model.
+- [x] Timeout or connection failure.
+- [x] Refusal.
+- [x] Structurally invalid output.
+- [x] Semantically empty output.
+- [x] Retry succeeds without duplicating or modifying source data.
+
+## Validation evidence
+
+### Review remediation
+
+- [x] Package the enrichment schema with the backend and prove it loads from a
+  release wheel.
+- [x] Bound OpenAI enrichment calls within the documented polling window.
+- [x] Reject incomplete Responses API results before parsing provider output.
+- [x] Clear generated fields atomically when a completed Capture is claimed for
+  re-enrichment.
+
+- [x] Official OpenAI guidance was cross-checked for the current Responses API
+  `text.format` strict JSON Schema shape and explicit refusal content.
+- [x] The official `openai` Python SDK 2.46.0 is constrained as a runtime
+  dependency and installed without breaking the existing test client.
+- [x] `.venv/bin/python -m pytest` passes all 94 tests without warnings.
+- [x] The isolated release-wheel test imports and parses the packaged enrichment
+  schema without access to the repository-level `contracts/` directory.
+- [x] Regression tests prove the 45-second/no-retry provider budget, reject an
+  incomplete result containing valid-looking JSON, and return clean generated
+  fields while a ready Capture is reprocessed.
+- [x] Tests prove exactly one provider request uses the checked-in schema with
+  `type=json_schema`, `strict=true`, and the environment-selected model.
+- [x] Automatic post-create enrichment and explicit retry both transition
+  `processing → ready` with a successful provider and preserve source fields.
+- [x] Missing configuration and provider/output failures transition to `error`
+  with safe client-visible messages and no provider trace.
+- [x] Live backend 0.4.0 exposed the retry route in OpenAPI; fixture Capture
+  `c3afd501-e184-480a-86f9-df2379ec539a` returned `processing`, then stored the
+  safe unconfigured `error` while direct SQLite inspection confirmed its source
+  text was unchanged.
+- [x] Live retry without a key returned HTTP `503` with stable code
+  `openai_not_configured`; health remained available and no secret was present.
 
 ## Vertical-slice exit gate
 
@@ -465,9 +503,11 @@ macOS Clipboard Capture
 → macOS card updates without data loss
 ```
 
-- [ ] Backend portion passes.
-- [ ] Developer A confirms polling and state UI.
-- [ ] Commit and push the working slice.
+- [~] Backend portion passes deterministic providers and failure simulation;
+  real OpenAI proof remains blocked by B-007.
+- [D] Developer A confirms polling and state UI under D-013/B-006.
+- [x] Commit the working Layer 4 slice.
+- [ ] Push the working Layer 4 slice; not requested in the current task.
 
 ---
 
@@ -868,6 +908,19 @@ Use IDs `B-###`. Never delete an entry; append resolution and date.
 - Does it block Layer 4 backend work? No under D-013. It still blocks marking
   the shared Layer 3 vertical slice complete.
 
+## B-007 — OpenAI credential is unavailable for the Layer 4 live proof
+
+- Opened: 2026-07-18
+- Severity: Integration / Layer 4 exit gate
+- Status: Open
+- Impact: Provider-boundary implementation and deterministic tests can proceed,
+  but the current `/health` response reports `openai_configured: false`, so a
+  real Responses API enrichment and model-access check cannot run.
+- Resolution needed: Configure `OPENAI_API_KEY` in the untracked root `.env`,
+  restart the backend, and run the checked-in live enrichment proof.
+- Does it block Layer 4 implementation? No. It blocks only the live provider
+  exit-gate evidence and marking Layer 4 completely verified.
+
 # Errors encountered
 
 Use IDs `E-###`. Record the original symptom and the resolution. Do not erase
@@ -1070,3 +1123,48 @@ resolved errors.
   reran the full suite successfully with 55 tests passing.
 - Project impact: No product-code assertion failed; final verification is
   complete.
+
+## E-018 — Layer 3 read-after-create assertion did not include enrichment failure transition
+
+- Date: 2026-07-18
+- Status: Resolved
+- Symptom: The first Layer 4 suite run passed 54 tests and failed the Layer 3
+  assertion that detail GET must exactly equal the initial `processing` response.
+- Cause: Layer 4 now executes a background task after the response; with no API
+  key it correctly preserves the raw Capture and changes the stored status to
+  `error` with a safe message.
+- Resolution: Updated the assertion to verify the initial `202` response and
+  subsequent safe error transition independently; added configured-provider,
+  retry, concurrency, and failure tests. The complete suite passes 88 tests.
+- Project impact: Expected contract evolution caught by the existing test; no
+  source or user-note data was lost.
+
+## E-019 — Release-wheel smoke test lacked the wheel build command
+
+- Date: 2026-07-18
+- Status: Resolved 2026-07-18
+- Symptom: The first review-remediation run passed 76 tests and failed the new
+  isolated wheel smoke test with `error: invalid command 'bdist_wheel'`. After
+  installing `wheel`, the stale backend emitted `UNKNOWN-0.0.0` instead of the
+  declared project artifact.
+- Cause: The local venv had neither `wheel` nor a current `setuptools`; version
+  58.1.0 ignored the PEP 621 project metadata during the intentionally
+  no-build-isolation regression test.
+- Resolution: Declared `setuptools>=68` and `wheel>=0.43,<1.0` for the local
+  developer toolchain, installed setuptools 83.0.0 and wheel 0.47.0, and reran
+  the isolated release-wheel import successfully. The focused suite passed 77
+  tests and the complete suite passed 94.
+- Project impact: No runtime defect; the release-artifact regression is now
+  reproducible and passing.
+
+## E-020 — Final documentation scan used backend-relative paths from the wrong directory
+
+- Date: 2026-07-18
+- Status: Resolved 2026-07-18
+- Symptom: The first final `rg` scan reported `docs: No such file or directory`
+  and stopped before dependency and diff checks.
+- Cause: The command used repository-root paths while its working directory was
+  `services/backend/`.
+- Resolution: Reran the scan, `pip check`, and `git diff --check` from the
+  repository root; all passed.
+- Project impact: None.
