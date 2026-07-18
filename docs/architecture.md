@@ -21,6 +21,11 @@ The backend is the only component that persists Captures, calls OpenAI, builds
 the full-text index, generates embeddings, or calculates hybrid-search scores.
 The macOS app and Chrome extension are API clients.
 
+After the baseline workflow is stable, an optional Apple on-device enrichment
+provider may run inside the macOS app and return the same structured enrichment
+payload to the backend. This is a gated demonstration path documented in
+decision D-008, not part of the P0 critical path.
+
 ## Ownership
 
 ### Developer A — Capture and experience
@@ -117,7 +122,9 @@ exactly and is documented as a byte-stable construction in
 5. Structured enrichment and FTS5.
 6. Chrome capture.
 7. Embeddings and hybrid retrieval.
-8. Reliability, demo fixtures, and submission freeze.
+8. Reliability, demo fixtures, and demo-readiness gate.
+9. Optional Apple on-device provider experiment, only if all gates pass.
+10. Final freeze, documentation, stable tag, and submission.
 
 No P1 or P2 feature begins before the three product-plan vertical slices work.
 

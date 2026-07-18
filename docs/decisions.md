@@ -21,6 +21,8 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-005 | Versioned API response and error envelopes | Addition | Accepted |
 | D-006 | Expose `context_truncated` in the Capture contract | Clarification | Accepted |
 | D-007 | JSON Schema Draft 2020-12 for checked-in contracts | Addition | Accepted |
+| D-008 | Optional Apple on-device intelligence provider | Addition | Accepted with gate |
+| D-009 | Allow page-context capture without a text selection | Clarification | Accepted |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -111,8 +113,57 @@ subset supported by the OpenAI API. This provides precise contracts for Swift,
 Python, and TypeScript consumers without requiring provider-specific wrappers
 in the checked-in schema.
 
+## D-008 — Optional Apple on-device intelligence provider
+
+- Classification: Addition
+- Status: Accepted with gate
+- Product impact: Adds an optional provider demonstration; does not replace the
+  OpenAI Build Week path
+- Schedule impact: Medium if activated
+- Ownership impact: Shared between Developers A and B
+
+After the complete OpenAI capture, enrichment, storage, and hybrid-retrieval
+workflow is stable, Recall may add an optional Apple on-device provider using
+the Foundation Models framework. The provider must emit the same enrichment
+contract and may not change the source or user-note fields.
+
+Developer B owns the provider-neutral enrichment boundary, storage metadata,
+OpenAI provider, and retrieval behavior. Developer A owns the Swift integration
+with Apple Foundation Models, model-availability checks, and provider UI.
+
+This path is gated by all of the following:
+
+1. The three baseline vertical slices pass their exit gates.
+2. The OpenAI contribution remains the primary judged workflow.
+3. The target Mac and OS expose a usable Apple model at demo time.
+4. Apple output can be mapped into `enriched_capture.schema.json` without a
+   second product data model.
+5. The addition does not delay demo stabilization or submission work.
+
+Apple `NLEmbedding` may be evaluated as a separate local retrieval experiment,
+but it must not replace the baseline OpenAI embedding path before the demo is
+stable. Provider identity and provider/model version must be recorded with
+generated data if this optional path is implemented.
+
+## D-009 — Allow page-context capture without a text selection
+
+- Classification: Clarification
+- Status: Accepted
+- Product impact: Preserves the no-selection Chrome flow in product-plan §13.3
+- Schedule impact: None
+
+The product plan permits saving a page title and limited page context when the
+user has not selected text, while the database requires `selected_text` to be a
+non-null string. The creation contract therefore requires `selected_text` to be
+present but allows it to be empty when either `source_title` or
+`surrounding_context` contains non-empty text. At least one of those three
+content fields must be non-empty.
+
+This is not a new capture mode. It reconciles the no-selection browser behavior
+with the baseline data model.
+
 ## Pending decisions
 
-None for Layer 0. Model snapshots, embedding dimensions, background-task
-mechanism, and SQLite migration tooling remain implementation-layer decisions
-and must not be silently fixed here.
+Model snapshots, embedding dimensions, background-task mechanism, SQLite
+migration tooling, and the exact provider-metadata fields remain
+implementation-layer decisions and must not be silently fixed here.

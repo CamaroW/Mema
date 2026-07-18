@@ -39,6 +39,8 @@ Capture source text and optional user note
   and dependency direction.
 - [`docs/decisions.md`](docs/decisions.md): accepted decisions and additions to
   the product baseline.
+- [`docs/developer-b-checklist.md`](docs/developer-b-checklist.md): live build
+  checklist, exit gates, validation evidence, and blocker log.
 
 ## Planned stack
 
