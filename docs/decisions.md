@@ -23,6 +23,7 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-007 | JSON Schema Draft 2020-12 for checked-in contracts | Addition | Accepted |
 | D-008 | Optional Apple on-device intelligence provider | Addition | Accepted with gate |
 | D-009 | Allow page-context capture without a text selection | Clarification | Accepted |
+| D-010 | Standard-library virtual environment for the backend | Addition | Accepted |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -161,6 +162,22 @@ content fields must be non-empty.
 
 This is not a new capture mode. It reconciles the no-selection browser behavior
 with the baseline data model.
+
+## D-010 — Standard-library virtual environment for the backend
+
+- Classification: Addition
+- Status: Accepted
+- Product impact: None
+- Schedule impact: Low
+
+Layer 1 uses Python's standard-library `venv`, project metadata in
+`services/backend/pyproject.toml`, constrained direct dependencies, and a
+single requirements entry point for development installs. This keeps the
+backend isolated without requiring `uv` or a global package install on the
+current development machine.
+
+This is an implementation-tooling choice, not a new product feature. A future
+toolchain change must preserve the documented start and test commands.
 
 ## Pending decisions
 

@@ -5,8 +5,8 @@ Recall is a macOS personal-memory capture tool that preserves source material,
 the user's reason for saving it, and an AI-generated contextual interpretation
 as separate, searchable layers.
 
-The current repository is at **Layer 0**: product, architecture, and API
-contracts are defined; application implementation has not started.
+The repository has completed **Layer 1**: product, architecture, and API
+contracts are defined, and the tested local backend foundation is available.
 
 ## Product baseline
 
@@ -53,10 +53,13 @@ Capture source text and optional user note
 
 ## Environment
 
-Copy `.env.example` to `.env` when backend work begins. Never commit `.env` or
-an API key.
+The backend starts without `.env` or an API key. Copy `.env.example` to `.env`
+only for local overrides, and never commit `.env` or an API key. Installation,
+start, health-check, test, and configuration instructions are in
+[`services/backend/README.md`](services/backend/README.md).
 
 ## Status
 
-Layer 0 complete. The next implementation layer is the minimal backend
-foundation and `GET /health`.
+Layers 0 and 1 are complete. The next implementation layer is SQLite schema and
+persistence; live evidence and blockers are tracked in
+[`docs/developer-b-checklist.md`](docs/developer-b-checklist.md).

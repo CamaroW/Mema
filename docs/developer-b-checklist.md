@@ -6,12 +6,11 @@ Project: Recall
 
 Last updated: 2026-07-18
 
-Current phase: Layer 0 complete; Layer 1 environment checked; clean-branch
-setup remains
+Current phase: Layer 1 complete; Layer 2 is next
 
-Current branch: `agent/layer-0-contracts`
+Current branch: `main`
 
-Last verified commit: `e75f783`
+Last verified commit: `926655c`
 
 Last baseline cross-check: 2026-07-18 against all sections of
 `docs/product-plan.md`
@@ -44,7 +43,7 @@ Update protocol:
 | Layer | Scope | Status | Exit-gate evidence |
 | --- | --- | --- | --- |
 | 0 | Contracts and documentation | Complete | Schemas and fixtures validated; commit `e75f783` pushed |
-| 1 | Backend foundation | Ready | Not started |
+| 1 | Backend foundation | Complete | 11 tests passed; live `/health` returned contracted `200` response |
 | 2 | SQLite persistence | Pending | Not started |
 | 3 | Capture CRUD and first integration | Pending | Not started |
 | 4 | OpenAI enrichment | Pending | Not started |
@@ -55,9 +54,9 @@ Update protocol:
 | 9 | Optional Apple on-device path | Gated | Decision D-008 accepted; prerequisites unmet |
 | 10 | Final freeze and submission | Pending | Not started |
 
-No hard blocker prevents Layer 1 work on the current branch. Layer 0 is now
-verified in `origin/main` at merge commit `9c08243`, so Developer A can treat
-the contracts as the shared baseline.
+No hard blocker prevents Layer 2 work on the current branch. Layer 0 is
+verified in `origin/main` at merge commit `9c08243`, and Layer 1 is implemented
+locally with a clean exit gate.
 
 ## Scope, schedule, and collaboration guardrails
 
@@ -149,23 +148,24 @@ Status: `[x]` complete
 
 # Layer 1 — Backend foundation
 
-Status: `[ ]` ready
+Status: `[x]` complete
 
 ## Prerequisites
 
 - [x] Confirm Layer 0 is merged before both developers branch. Verified in
   `origin/main` at merge commit `9c08243` on 2026-07-18.
-- [~] Confirm the local Python version and package tooling. Found Python 3.10.1
-  and pip 21.2.4; `uv` is absent. Select and pin the environment/dependency
-  approach as the first Layer 1 task.
+- [x] Confirm the local Python version and package tooling. Found Python 3.10.1
+  and pip 21.2.4; `uv` is absent. Layer 1 uses a standard-library `venv` and
+  project-declared, constrained dependencies so no global package install is
+  required.
 - [x] Confirm no repo-level `AGENTS.md` or toolchain constraint is missing. No
   `AGENTS.md` was found in the repository hierarchy on 2026-07-18.
 
 ## Build tasks
 
-- [ ] Create `services/backend/` package structure.
-- [ ] Define backend dependencies and a reproducible install command.
-- [ ] Create environment-based configuration for:
+- [x] Create `services/backend/` package structure.
+- [x] Define backend dependencies and a reproducible install command.
+- [x] Create environment-based configuration for:
   - `OPENAI_API_KEY`
   - `OPENAI_MODEL`
   - `OPENAI_EMBEDDING_MODEL`
@@ -174,29 +174,43 @@ Status: `[ ]` ready
   - `RECALL_DATABASE_PATH`
   - `RECALL_LOG_LEVEL`
   - `RECALL_CORS_ORIGINS`
-- [ ] Refuse non-loopback binding by default.
-- [ ] Create one minimal, documented FastAPI entry point. An application-factory
+- [x] Refuse non-loopback binding by default.
+- [x] Create one minimal, documented FastAPI entry point. An application-factory
   pattern is optional and must not delay the health endpoint.
-- [ ] Implement `GET /health`.
-- [ ] Report process, database, and OpenAI-configuration state separately.
-- [ ] Allow the backend to start without an OpenAI key.
-- [ ] Add only the logging needed to diagnose startup and requests. Never log
+- [x] Implement `GET /health`.
+- [x] Report process, database, and OpenAI-configuration state separately.
+- [x] Allow the backend to start without an OpenAI key.
+- [x] Add only the logging needed to diagnose startup and requests. Never log
   API keys; avoiding full captured text in default logs is an engineering
   safeguard, not a new product feature.
-- [ ] Add backend test configuration and the first health test.
-- [ ] Document one command to start and one command to test the backend.
+- [x] Add backend test configuration and the first health test.
+- [x] Document one command to start and one command to test the backend.
 
 ## Required tests
 
-- [ ] Backend starts on `127.0.0.1:8765`.
-- [ ] `/health` returns `200` with database status.
-- [ ] `/health` reports `openai_configured: false` when the key is absent.
-- [ ] A missing `.env` does not crash the service.
-- [ ] An invalid port or database path fails with a visible configuration error.
+- [x] Backend starts on `127.0.0.1:8765`.
+- [x] `/health` returns `200` with database status.
+- [x] `/health` reports `openai_configured: false` when the key is absent.
+- [x] A missing `.env` does not crash the service.
+- [x] An invalid port or database path fails with a visible configuration error.
+
+## Validation evidence
+
+- [x] Created a fresh `.venv`, upgraded its pip, and installed with
+  `.venv/bin/python -m pip install -r requirements.txt`.
+- [x] `.venv/bin/python -m pip check` reported no broken requirements.
+- [x] `.venv/bin/python -m pytest` passed all 11 tests without warnings.
+- [x] A live `.venv/bin/python -m app` run bound to `127.0.0.1:8765`; curl
+  returned `{"status":"ok","database":"ok","openai_configured":false}`.
+- [x] Live startup with `RECALL_HOST=0.0.0.0` exited `1` with a loopback
+  validation error.
+- [x] Live startup with `RECALL_DATABASE_PATH=/tmp` exited `1` with a database
+  file-path validation error; invalid ports are also covered by tests.
+- [x] `git diff --check` passed after implementation.
 
 ## Exit gate
 
-- [ ] A new developer can install dependencies, start the backend, call
+- [x] A new developer can install dependencies, start the backend, call
   `/health`, and run tests from README instructions.
 
 ---
@@ -743,23 +757,23 @@ Use IDs `B-###`. Never delete an entry; append resolution and date.
 - Severity: Schedule risk
 - Status: Open
 - Impact: The product plan's July 18 target includes FastAPI, health, SQLite,
-  Capture CRUD, curl proof, and macOS list integration. Only Layer 0 contracts
-  are currently complete.
-- Resolution needed: Begin Layers 1–3 immediately after branch coordination and
-  measure progress against the first vertical-slice gate.
+  Capture CRUD, curl proof, and macOS list integration. Layer 1 and its curl
+  proof are complete; Layers 2–3 and the macOS integration remain.
+- Resolution needed: Continue through Layers 2–3 and coordinate the first
+  macOS vertical-slice gate with Developer A.
 - Does it block Layer 1? No, but it reduces buffer before the July 21 deadline.
 
 ## B-005 — Uncommitted documentation prevents a clean Layer 1 branch
 
 - Opened: 2026-07-18
 - Severity: Workflow
-- Status: Open
+- Status: Resolved 2026-07-18
 - Impact: README, architecture, decisions, and the live checklist are modified
   on `agent/layer-0-contracts`. Starting backend code now would mix planning
   changes with the Layer 1 implementation or carry uncommitted changes across a
   branch switch.
-- Resolution needed: Review, commit, and push the documentation updates, then
-  start Layer 1 from the agreed current `main` baseline.
+- Resolution: Documentation was committed and pushed in `926655c`. Layer 1
+  started from clean `main`, with local `HEAD` equal to `origin/main`.
 - Does it block writing code? No technically; yes for the recommended clean
   branch and commit history.
 
@@ -825,11 +839,32 @@ resolved errors.
 ## E-006 — FastAPI runtime dependencies are not installed
 
 - Date: 2026-07-18
-- Status: Expected / unresolved until Layer 1 setup
+- Status: Resolved
 - Symptom: Importing `fastapi`, `pydantic`, and `uvicorn` fails at `fastapi`
   with `ModuleNotFoundError`.
-- Resolution needed: Choose the Layer 1 Python environment, declare pinned or
-  constrained dependencies, install them in that environment, and record the
-  reproducible setup command.
-- Project impact: The backend cannot run yet. This is normal pre-Layer-1 state,
-  not an external blocker.
+- Resolution: Added constrained dependencies and the standard-library `venv`
+  setup in `services/backend/`; the documented install succeeded and
+  `.venv/bin/python -m pip check` found no broken requirements.
+- Project impact: None after resolution.
+
+## E-007 — Initial test run emitted a deprecated test-client warning
+
+- Date: 2026-07-18
+- Status: Resolved
+- Symptom: All 11 tests passed, but Starlette warned that its fallback to the
+  legacy `httpx` package is deprecated and requested `httpx2`.
+- Resolution: Replaced the development dependency with `httpx2`, reinstalled
+  from `requirements.txt`, removed the legacy fallback packages from the test
+  environment, and reran the suite: 11 tests passed without warnings.
+- Project impact: None after resolution.
+
+## E-008 — Editable install generated an unignored metadata directory
+
+- Date: 2026-07-18
+- Status: Resolved
+- Symptom: The final status review showed `services/backend/recall_backend.egg-info/`
+  as untracked after the editable development install.
+- Resolution: Added the standard `*.egg-info/` rule to `.gitignore`; the local
+  metadata remains available to the environment but is no longer a candidate
+  for source control.
+- Project impact: None after resolution.
