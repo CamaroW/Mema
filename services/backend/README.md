@@ -160,6 +160,21 @@ cannot become query syntax; see decisions D-015 and D-017.
 .venv/bin/python -m pytest
 ```
 
+## Destructive-in-temp stress test
+
+The deterministic stress harness uses only temporary SQLite databases and
+local provider doubles; it never calls OpenAI:
+
+```bash
+.venv/bin/python tools/stress_backend.py
+```
+
+It exercises malformed and oversized payloads, duplicate and ambiguous cards,
+bulk and concurrent writes, FTS edge cases, provider failures, realistic vector
+dimensions, corrupt rows, CORS, and restart durability. The dated findings and
+known limitations are recorded in
+`../../docs/backend-stress-report-2026-07-18.md`.
+
 ## Configuration
 
 | Variable | Default | Purpose |
