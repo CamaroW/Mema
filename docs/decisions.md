@@ -34,6 +34,7 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-018 | Build-free Manifest V3 Chrome extension | Addition | Accepted |
 | D-019 | Documentation-only main with stacked layer branches | Addition | Accepted by user direction |
 | D-020 | Deterministic destructive-in-temp backend stress harness | Addition | Accepted by user direction |
+| D-021 | Bounded provider-neutral stress hardening | Addition | Accepted by user direction |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -401,6 +402,39 @@ realistic-vector search, two seconds for the small-vector concurrent case, and
 five seconds for the realistic-vector concurrent case—are provisional test
 guardrails, not a public service-level agreement. The harness and results are
 recorded in [`backend-stress-report-2026-07-18.md`](backend-stress-report-2026-07-18.md).
+
+## D-021 — Bounded provider-neutral stress hardening
+
+- Classification: Addition / reliability hardening
+- Status: Accepted by explicit user direction
+- Product impact: No new user-facing feature; malformed work now fails safely
+- Schedule impact: Closes B-011 while live-provider and team-integration gates remain
+
+The stress findings are repaired on `fix/backend-stress-hardening` without a
+new external service, queue, or vector dependency. This decision supersedes the
+deferred-idempotency sentence in D-011: optional `client_capture_id` now makes
+create retries transactionally idempotent, while requests without it still
+create distinct Captures.
+
+All enrichment providers are validated again at the provider-neutral service
+boundary. Empty, `null`, partial, generic, or oversized output has failure code
+`invalid_model_output` and must store a terminal `error` with a safe message;
+it may neither produce an empty `ready` Capture nor leave one in `processing`.
+This is deliberately provider-neutral so the gated Apple/local path follows the
+same lifecycle contract as OpenAI.
+
+Request metadata, notes, search queries, enrichment scalars, lists, and list
+items receive documented caps. Search rejects control characters, retries an
+escaped any-term FTS expression only when the strict all-term expression has no
+rows, and caches decoded normalized ready vectors until the SQLite file changes.
+Overflow-safe normalization, stored-JSON health checks, and the stable malformed-
+body envelope complete the concise remediation. These choices amend the strict
+AND behavior in D-015 and the per-request full decode described in D-017.
+
+The same deterministic harness must remain green after changes. The acceptance
+evidence is 181 passing backend tests and 44/44 passing stress scenarios; real
+OpenAI calls, real-socket behavior, power loss, disk-full behavior, and final
+team integration remain separate gates.
 
 ## Pending decisions
 

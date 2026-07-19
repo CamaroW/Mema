@@ -85,6 +85,8 @@ combines Developer B's Chrome and retrieval deltas but not Developer A's macOS
 client. Live evidence and blockers are tracked in
 [`docs/developer-b-checklist.md`](docs/developer-b-checklist.md).
 
-The first full backend stress audit is complete on local branch
-`test/backend-stress`: 44 escalated scenarios produced 28 passes and 16
-breaks, grouped into 13 repair items. Production behavior was not changed.
+The first full backend stress audit is retained on local branch
+`test/backend-stress`: its 44 escalated scenarios originally exposed 13 grouped
+repair items. Local branch `fix/backend-stress-hardening` at `5ea3d2a` resolves
+all groups; 181 backend tests and all 44 stress scenarios now pass. Neither
+branch is pushed.

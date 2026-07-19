@@ -32,6 +32,7 @@ below. No existing commit was rewritten or force-updated.
 | `layer/7-hybrid-retrieval` | `faa45d7` | Embeddings and hybrid retrieval |
 | `integration/layers-6-7` | `3389bae` | Validated combined Developer B runtime at backend 0.7.0 |
 | `test/backend-stress` | `0c9a52f` | Reproducible backend stress harness and dated break report |
+| `fix/backend-stress-hardening` | `5ea3d2a` | Concise fixes for all 13 stress finding groups plus regression coverage |
 | `codex/macos-client` | `12862d3` on `origin` | Developer A's macOS client; left untouched |
 
 The branches are dependency checkpoints, not unrelated orphan trees. Layers
@@ -61,3 +62,7 @@ accepted as the final team integration branch.
 no production behavior; it contains the destructive-in-temp harness and the
 exact findings summarized on documentation-only `main`. It is local and
 unpushed.
+
+`fix/backend-stress-hardening` continues from the stress branch. It retains the
+reproduction harness, applies the remediations documented in D-021, and passes
+181 backend tests plus all 44 stress scenarios. It is local and unpushed.
