@@ -6,11 +6,11 @@ Project: Recall
 
 Last updated: 2026-07-20
 
-Current phase: screenshot-to-notes implementation verified; publish and live GPT proof pending
+Current phase: screenshot-to-notes addition published; live GPT proof B-012 pending
 
 Current branch: `agent/screenshot-notes-ocr`
 
-Last verified commit: current branch HEAD (see Git history)
+Last verified implementation commit: `fc23cdf`
 
 Canonical target: `main`
 
@@ -61,7 +61,7 @@ Update protocol:
 | 8 | Reliability and demo readiness | P0 integration verified / backlog reduced | Current branch passes 210 backend tests and 44/44 stress scenarios; stale-process recovery, one-command startup, and 16 Chrome tests are verified |
 | 9 | Optional Apple on-device path | Gated | Decision D-008 accepted; prerequisites unmet |
 | 10 | Final freeze and submission | Pending | Not started |
-| Addition | Screenshot-to-notes OCR | Implementation verified / publish pending | D-027; 210 backend, 16 extension, and 37 macOS tests pass; B-012 tracks live GPT proof |
+| Addition | Screenshot-to-notes OCR | Published / live GPT proof pending | Commit `fc23cdf`, draft PR #4, 210 backend, 16 extension, and 37 macOS tests pass; B-012 tracks live GPT proof |
 
 The D-023 integration closes B-010, the macOS slice closes B-006, and real
 provider plus unpacked-Chrome evidence closes B-007, B-008, and B-009. B-011 is
@@ -71,7 +71,8 @@ gate.
 
 ## Active addition — screenshot text into notes
 
-Status: `[~]` implementation verified; publish pending under D-027
+Status: `[x]` implemented, verified, and published under D-027; B-012 is an
+external demo-proof gate rather than unfinished code
 
 - [x] Audit local and remote branches plus merged PRs for an existing screenshot
   or OCR implementation. None exists; only P2 deferral documentation was found.
@@ -95,8 +96,8 @@ Status: `[~]` implementation verified; publish pending under D-027
   syntax checks, and 37 macOS tests.
 - [x] Document the privacy boundary, demo flow, API surface, errors, and the
   deliberate difference from the outline's deferred full image-memory work.
-- [~] Commit with `unsupervised push` in the commit message, push this branch,
-  and open a draft pull request.
+- [x] Commit with `unsupervised push` in the commit message, push branch
+  `agent/screenshot-notes-ocr`, and open draft PR #4.
 
 ## Scope, schedule, and collaboration guardrails
 
@@ -1292,6 +1293,16 @@ resolved errors.
 - Resolution: Preserved the existing process and reran on port 8876. The OCR
   route returned the expected provider-off 503, list returned 200 with no
   Captures, and the temporary service shut down cleanly.
+
+## E-053 — GitHub app could not create the draft pull request
+
+- Date: 2026-07-20
+- Status: Resolved 2026-07-20
+- Symptom: The branch pushed successfully, but the GitHub app returned HTTP 403
+  `Resource not accessible by integration` for draft-PR creation.
+- Resolution: Used the already authenticated GitHub CLI as the publishing
+  workflow's documented fallback and opened draft PR #4:
+  `https://github.com/CamaroW/capture/pull/4`.
 
 ## E-038 — First real provider call returned HTTP 429
 

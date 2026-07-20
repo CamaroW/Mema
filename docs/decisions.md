@@ -570,8 +570,8 @@ runner completes normally.
 ## D-027 — Transient screenshot OCR into the existing Capture pipeline
 
 - Classification: Addition approved by explicit user direction
-- Status: Implemented and deterministically verified on `agent/screenshot-notes-ocr`;
-  live GPT proof remains tracked by B-012
+- Status: Implemented, verified, and published in draft PR #4; live GPT proof
+  remains tracked by B-012
 - Product impact: Adds an interactive screenshot-to-note path with GPT first and
   Apple Vision as an on-device alternative
 - Schedule impact: Bounded exception to the outline's deferred OCR scope
