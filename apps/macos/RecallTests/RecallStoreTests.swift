@@ -5,6 +5,195 @@ import XCTest
 
 @MainActor
 final class RecallStoreTests: XCTestCase {
+    func testPreparingScreenshotCaptureKeepsImageTransientAndDefaultsToGPT() {
+        let store = RecallStore(
+            client: RecordingAPIClient(),
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            screenshotCaptureService: ScreenshotServiceStub(
+                result: .success(
+                    ScreenshotSnapshot(
+                        imageData: Data([1, 2, 3]),
+                        mediaType: "image/png",
+                        sourceApplication: "Preview"
+                    )
+                )
+            )
+        )
+
+        XCTAssertTrue(store.prepareScreenshotCapture())
+        XCTAssertEqual(store.quickCaptureDraft?.kind, .screenshot)
+        XCTAssertEqual(store.quickCaptureDraft?.selectedText, "")
+        XCTAssertEqual(store.quickCaptureDraft?.sourceApplication, "Preview")
+        XCTAssertEqual(store.screenshotPreviewData, Data([1, 2, 3]))
+        XCTAssertEqual(store.screenshotExtractionMode, .gpt)
+    }
+
+    func testGPTScreenshotExtractionAddsExactTextToSourceAndEditableNote() async throws {
+        let client = RecordingAPIClient(screenshotOCRText: "Exact GPT text")
+        let store = RecallStore(
+            client: client,
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            screenshotCaptureService: ScreenshotServiceStub(
+                result: .success(
+                    ScreenshotSnapshot(
+                        imageData: Data([1, 2, 3]),
+                        mediaType: "image/png",
+                        sourceApplication: "Safari"
+                    )
+                )
+            )
+        )
+        XCTAssertTrue(store.prepareScreenshotCapture())
+
+        let extracted = await store.extractScreenshotText()
+
+        XCTAssertTrue(extracted)
+        XCTAssertEqual(store.quickCaptureDraft?.selectedText, "Exact GPT text")
+        XCTAssertEqual(store.quickCaptureDraft?.userNote, "Exact GPT text")
+        XCTAssertEqual(store.screenshotExtractionSummary, "gpt-5.6 · Cloud extraction")
+        let recordedOCRRequest = await client.lastOCRRequest()
+        let request = try XCTUnwrap(recordedOCRRequest)
+        XCTAssertEqual(Data(base64Encoded: request.imageBase64), Data([1, 2, 3]))
+    }
+
+    func testAppleVisionScreenshotExtractionStaysLocalAndUsesSameDraftPath() async {
+        let client = RecordingAPIClient()
+        let store = RecallStore(
+            client: client,
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            screenshotCaptureService: ScreenshotServiceStub(
+                result: .success(
+                    ScreenshotSnapshot(
+                        imageData: Data([4, 5, 6]),
+                        mediaType: "image/png",
+                        sourceApplication: "Preview"
+                    )
+                )
+            ),
+            localScreenshotExtractor: LocalExtractorStub(result: .success("Local text"))
+        )
+        XCTAssertTrue(store.prepareScreenshotCapture())
+        store.screenshotExtractionMode = .appleVision
+
+        let extracted = await store.extractScreenshotText()
+
+        XCTAssertTrue(extracted)
+        XCTAssertEqual(store.quickCaptureDraft?.selectedText, "Local text")
+        XCTAssertEqual(store.quickCaptureDraft?.userNote, "Local text")
+        XCTAssertEqual(
+            store.screenshotExtractionSummary,
+            "Apple Vision · Processed on this Mac"
+        )
+        let ocrRequestCount = await client.ocrRequestCount()
+        XCTAssertEqual(ocrRequestCount, 0)
+    }
+
+    func testOversizedLocalScreenshotTextIsRejectedWithoutTruncating() async {
+        let oversized = String(
+            repeating: "x",
+            count: RecallStore.maximumUserNoteLength + 1
+        )
+        let store = RecallStore(
+            client: RecordingAPIClient(),
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            screenshotCaptureService: ScreenshotServiceStub(
+                result: .success(
+                    ScreenshotSnapshot(
+                        imageData: Data([7]),
+                        mediaType: "image/png",
+                        sourceApplication: nil
+                    )
+                )
+            ),
+            localScreenshotExtractor: LocalExtractorStub(result: .success(oversized))
+        )
+        XCTAssertTrue(store.prepareScreenshotCapture())
+        store.screenshotExtractionMode = .appleVision
+
+        let extracted = await store.extractScreenshotText()
+
+        XCTAssertFalse(extracted)
+        XCTAssertEqual(store.quickCaptureDraft?.selectedText, "")
+        XCTAssertEqual(store.quickCaptureDraft?.userNote, "")
+        XCTAssertNotNil(store.quickCaptureError)
+    }
+
+    func testEditedScreenshotNoteCannotBeSilentlyOverwrittenByReExtraction() async {
+        let client = RecordingAPIClient(screenshotOCRText: "Original text")
+        let store = RecallStore(
+            client: client,
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            screenshotCaptureService: ScreenshotServiceStub(
+                result: .success(
+                    ScreenshotSnapshot(
+                        imageData: Data([8]),
+                        mediaType: "image/png",
+                        sourceApplication: nil
+                    )
+                )
+            )
+        )
+        XCTAssertTrue(store.prepareScreenshotCapture())
+        let firstExtraction = await store.extractScreenshotText()
+        XCTAssertTrue(firstExtraction)
+        store.quickCaptureDraft?.userNote = "My edited note"
+
+        let extractedAgain = await store.extractScreenshotText()
+
+        XCTAssertFalse(extractedAgain)
+        XCTAssertEqual(store.quickCaptureDraft?.userNote, "My edited note")
+        let ocrRequestCount = await client.ocrRequestCount()
+        XCTAssertEqual(ocrRequestCount, 1)
+    }
+
+    func testScreenshotTextSavesThroughExistingCapturePipelineAndClearsImage() async throws {
+        let client = RecordingAPIClient(
+            createStatus: .ready,
+            screenshotOCRText: "Screenshot note"
+        )
+        let store = RecallStore(
+            client: client,
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            screenshotCaptureService: ScreenshotServiceStub(
+                result: .success(
+                    ScreenshotSnapshot(
+                        imageData: Data([9]),
+                        mediaType: "image/png",
+                        sourceApplication: "Keynote"
+                    )
+                )
+            )
+        )
+        XCTAssertTrue(store.prepareScreenshotCapture())
+        let extracted = await store.extractScreenshotText()
+        XCTAssertTrue(extracted)
+
+        let saved = await store.submitQuickCapture()
+        XCTAssertTrue(saved)
+        let recordedCreateRequest = await client.lastCreateRequest()
+        let request = try XCTUnwrap(recordedCreateRequest)
+        XCTAssertEqual(request.sourceType, .screenshot)
+        XCTAssertEqual(request.sourceApp, "Keynote")
+        XCTAssertEqual(request.selectedText, "Screenshot note")
+        XCTAssertEqual(request.userNote, "Screenshot note")
+
+        store.clearQuickCapture()
+        XCTAssertNil(store.screenshotPreviewData)
+        XCTAssertNil(store.quickCaptureDraft)
+    }
+
     func testPreparingClipboardCapturePreservesTextAndSourceApplication() {
         let client = RecordingAPIClient()
         let service = ClipboardServiceStub(
@@ -446,11 +635,29 @@ private struct ClipboardServiceStub: ClipboardCaptureServing {
     }
 }
 
+@MainActor
+private struct ScreenshotServiceStub: ScreenshotCaptureServing {
+    let result: Result<ScreenshotSnapshot, Error>
+
+    func captureInteractive() throws -> ScreenshotSnapshot {
+        try result.get()
+    }
+}
+
+private struct LocalExtractorStub: LocalScreenshotTextExtracting {
+    let result: Result<String, ScreenshotTextExtractionError>
+
+    func extractText(from imageData: Data) async throws -> String {
+        try result.get()
+    }
+}
+
 private actor RecordingAPIClient: RecallAPIClient {
     private var createRequests: [CaptureCreateRequest] = []
     private var searchQueries: [String] = []
     private var detailRequests = 0
     private var listRequests = 0
+    private var ocrRequests: [ScreenshotOCRRequest] = []
     private var shouldFailNextCreate: Bool
     private let createStatus: CaptureStatus
     private let pollStatus: CaptureStatus?
@@ -460,6 +667,7 @@ private actor RecordingAPIClient: RecallAPIClient {
     private let searchFailure: RecallAPIError?
     private let searchDelayNanoseconds: UInt64
     private let healthResponse: HealthResponse
+    private let screenshotOCRText: String
 
     init(
         failFirstCreate: Bool = false,
@@ -470,6 +678,7 @@ private actor RecordingAPIClient: RecallAPIClient {
         listFailure: RecallAPIError? = nil,
         searchFailure: RecallAPIError? = nil,
         searchDelayNanoseconds: UInt64 = 0,
+        screenshotOCRText: String = "Extracted screenshot text",
         healthResponse: HealthResponse = HealthResponse(
             status: "ok",
             database: "ok",
@@ -485,6 +694,7 @@ private actor RecordingAPIClient: RecallAPIClient {
         self.searchFailure = searchFailure
         self.searchDelayNanoseconds = searchDelayNanoseconds
         self.healthResponse = healthResponse
+        self.screenshotOCRText = screenshotOCRText
     }
 
     func creationCount() -> Int {
@@ -509,6 +719,14 @@ private actor RecordingAPIClient: RecallAPIClient {
 
     func listRequestCount() -> Int {
         listRequests
+    }
+
+    func ocrRequestCount() -> Int {
+        ocrRequests.count
+    }
+
+    func lastOCRRequest() -> ScreenshotOCRRequest? {
+        ocrRequests.last
     }
 
     func health() async throws -> HealthResponse {
@@ -568,6 +786,16 @@ private actor RecordingAPIClient: RecallAPIClient {
             statusCode: 404,
             code: "capture_not_found",
             message: "Capture was not found."
+        )
+    }
+
+    func extractScreenshotText(_ request: ScreenshotOCRRequest) async throws -> ScreenshotOCRResponse {
+        ocrRequests.append(request)
+        return ScreenshotOCRResponse(
+            text: screenshotOCRText,
+            provider: .openai,
+            processingLocation: .cloud,
+            model: "gpt-5.6"
         )
     }
 

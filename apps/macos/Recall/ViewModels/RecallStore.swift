@@ -1,9 +1,15 @@
 import Foundation
 
 struct QuickCaptureDraft: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case clipboard
+        case screenshot
+    }
+
     let clientCaptureID: String
     let capturedAt: String
-    let selectedText: String
+    let kind: Kind
+    var selectedText: String
     let sourceApplication: String?
     var userNote: String = ""
 
@@ -11,11 +17,13 @@ struct QuickCaptureDraft: Equatable, Sendable {
         selectedText: String,
         sourceApplication: String?,
         userNote: String = "",
+        kind: Kind = .clipboard,
         clientCaptureID: String = UUID().uuidString.lowercased(),
         capturedAt: String = CaptureCreateRequest.currentTimestamp()
     ) {
         self.clientCaptureID = clientCaptureID
         self.capturedAt = capturedAt
+        self.kind = kind
         self.selectedText = selectedText
         self.sourceApplication = sourceApplication
         self.userNote = userNote
@@ -27,6 +35,20 @@ struct QuickCaptureDraft: Equatable, Sendable {
 
     var noteCharacterCount: Int {
         userNote.unicodeScalars.count
+    }
+}
+
+enum ScreenshotExtractionMode: String, CaseIterable, Identifiable, Sendable {
+    case gpt
+    case appleVision
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .gpt: "GPT · Cloud"
+        case .appleVision: "Apple Vision · On device"
+        }
     }
 }
 
@@ -73,11 +95,17 @@ final class RecallStore: ObservableObject {
     @Published var quickCaptureDraft: QuickCaptureDraft?
     @Published private(set) var isSubmittingCapture = false
     @Published var quickCaptureError: String?
+    @Published private(set) var screenshotPreviewData: Data?
+    @Published var screenshotExtractionMode: ScreenshotExtractionMode = .gpt
+    @Published private(set) var isExtractingScreenshot = false
+    @Published private(set) var screenshotExtractionSummary: String?
     @Published var notice: AppNotice?
     @Published private(set) var searchFocusToken = UUID()
 
     private let client: any RecallAPIClient
     private let clipboardService: any ClipboardCaptureServing
+    private let screenshotCaptureService: any ScreenshotCaptureServing
+    private let localScreenshotExtractor: any LocalScreenshotTextExtracting
     private var libraryCaptures: [Capture] = []
     private var pollingTasks: [String: Task<Void, Never>] = [:]
     private var pollingGenerations: [String: UUID] = [:]
@@ -86,6 +114,8 @@ final class RecallStore: ObservableObject {
     private var didExplainSearchFallback = false
     private var searchGeneration = 0
     private var attemptedQuickCaptureRequest: CaptureCreateRequest?
+    private var lastExtractedScreenshotText: String?
+    private var screenshotMediaType = "image/png"
     private let foregroundRefreshIntervalNanoseconds: UInt64
     private let pollingIntervalNanoseconds: UInt64
     private let pollingAttemptLimit: Int
@@ -94,6 +124,8 @@ final class RecallStore: ObservableObject {
     init(
         client: any RecallAPIClient,
         clipboardService: any ClipboardCaptureServing,
+        screenshotCaptureService: any ScreenshotCaptureServing = SystemScreenshotCaptureService(),
+        localScreenshotExtractor: any LocalScreenshotTextExtracting = AppleVisionScreenshotTextExtractor(),
         foregroundRefreshIntervalNanoseconds: UInt64 = 5_000_000_000,
         pollingIntervalNanoseconds: UInt64 = 2_000_000_000,
         pollingAttemptLimit: Int = 30,
@@ -101,6 +133,8 @@ final class RecallStore: ObservableObject {
     ) {
         self.client = client
         self.clipboardService = clipboardService
+        self.screenshotCaptureService = screenshotCaptureService
+        self.localScreenshotExtractor = localScreenshotExtractor
         self.foregroundRefreshIntervalNanoseconds = foregroundRefreshIntervalNanoseconds
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
         self.pollingAttemptLimit = pollingAttemptLimit
@@ -110,7 +144,9 @@ final class RecallStore: ObservableObject {
     convenience init(client: any RecallAPIClient = LiveRecallAPIClient()) {
         self.init(
             client: client,
-            clipboardService: SystemClipboardCaptureService()
+            clipboardService: SystemClipboardCaptureService(),
+            screenshotCaptureService: SystemScreenshotCaptureService(),
+            localScreenshotExtractor: AppleVisionScreenshotTextExtractor()
         )
     }
 
@@ -352,12 +388,113 @@ final class RecallStore: ObservableObject {
             )
             attemptedQuickCaptureRequest = nil
             quickCaptureError = nil
+            screenshotPreviewData = nil
+            screenshotExtractionSummary = nil
+            lastExtractedScreenshotText = nil
             return true
         } catch {
             quickCaptureDraft = nil
             attemptedQuickCaptureRequest = nil
             quickCaptureError = error.recallUserMessage
             notice = AppNotice(style: .warning, message: error.recallUserMessage)
+            return false
+        }
+    }
+
+    @discardableResult
+    func prepareScreenshotCapture() -> Bool {
+        do {
+            let snapshot = try screenshotCaptureService.captureInteractive()
+            quickCaptureDraft = QuickCaptureDraft(
+                selectedText: "",
+                sourceApplication: snapshot.sourceApplication.map {
+                    Self.prefixUnicodeScalars(
+                        $0,
+                        limit: Self.maximumSourceApplicationLength
+                    )
+                },
+                kind: .screenshot
+            )
+            screenshotPreviewData = snapshot.imageData
+            screenshotMediaType = snapshot.mediaType
+            screenshotExtractionMode = .gpt
+            screenshotExtractionSummary = nil
+            lastExtractedScreenshotText = nil
+            attemptedQuickCaptureRequest = nil
+            quickCaptureError = nil
+            return true
+        } catch ScreenshotCaptureError.cancelled {
+            return false
+        } catch {
+            quickCaptureDraft = nil
+            screenshotPreviewData = nil
+            attemptedQuickCaptureRequest = nil
+            quickCaptureError = error.recallUserMessage
+            notice = AppNotice(style: .warning, message: error.recallUserMessage)
+            return false
+        }
+    }
+
+    func extractScreenshotText() async -> Bool {
+        guard var draft = quickCaptureDraft,
+              draft.kind == .screenshot,
+              let screenshotPreviewData else {
+            return false
+        }
+        guard !isExtractingScreenshot else { return false }
+        if let lastExtractedScreenshotText,
+           draft.userNote != lastExtractedScreenshotText {
+            quickCaptureError = "Your extracted note has edits. Start a new screenshot before changing extractors so Recall does not overwrite them."
+            return false
+        }
+
+        isExtractingScreenshot = true
+        quickCaptureError = nil
+        defer { isExtractingScreenshot = false }
+
+        do {
+            let text: String
+            let summary: String
+            switch screenshotExtractionMode {
+            case .gpt:
+                let response = try await client.extractScreenshotText(
+                    ScreenshotOCRRequest(
+                        mediaType: screenshotMediaType,
+                        imageBase64: screenshotPreviewData.base64EncodedString()
+                    )
+                )
+                text = response.text
+                summary = "\(response.model) · Cloud extraction"
+            case .appleVision:
+                text = try await localScreenshotExtractor.extractText(
+                    from: screenshotPreviewData
+                )
+                summary = "Apple Vision · Processed on this Mac"
+            }
+
+            guard let normalized = text.nonEmptyTrimmed else {
+                throw ScreenshotTextExtractionError.noText
+            }
+            let extractedCount = normalized.unicodeScalars.count
+            guard extractedCount <= Self.maximumUserNoteLength else {
+                quickCaptureError = "The screenshot contains \(extractedCount.formatted()) characters. Select a smaller region so it fits the \(Self.maximumUserNoteLength.formatted())-character note limit."
+                return false
+            }
+            guard extractedCount <= Self.maximumSelectedTextLength else {
+                quickCaptureError = "The screenshot contains too much text for one Capture. Select a smaller region and try again."
+                return false
+            }
+
+            draft.selectedText = normalized
+            draft.userNote = normalized
+            quickCaptureDraft = draft
+            lastExtractedScreenshotText = normalized
+            screenshotExtractionSummary = summary
+            return true
+        } catch {
+            guard !Self.isCancellation(error) else { return false }
+            quickCaptureError = error.recallUserMessage
+            updateConnectionState(after: error)
             return false
         }
     }
@@ -377,13 +514,25 @@ final class RecallStore: ObservableObject {
         }
 
         let note = draft.userNote.nonEmptyTrimmed == nil ? nil : draft.userNote
-        let currentRequest = CaptureCreateRequest.clipboard(
-            clientCaptureID: draft.clientCaptureID,
-            capturedAt: draft.capturedAt,
-            text: draft.selectedText,
-            sourceApp: draft.sourceApplication,
-            userNote: note
-        )
+        let currentRequest: CaptureCreateRequest
+        switch draft.kind {
+        case .clipboard:
+            currentRequest = .clipboard(
+                clientCaptureID: draft.clientCaptureID,
+                capturedAt: draft.capturedAt,
+                text: draft.selectedText,
+                sourceApp: draft.sourceApplication,
+                userNote: note
+            )
+        case .screenshot:
+            currentRequest = .screenshot(
+                clientCaptureID: draft.clientCaptureID,
+                capturedAt: draft.capturedAt,
+                text: draft.selectedText,
+                sourceApp: draft.sourceApplication,
+                userNote: note
+            )
+        }
 
         let request: CaptureCreateRequest
         if let attemptedQuickCaptureRequest {
@@ -443,6 +592,11 @@ final class RecallStore: ObservableObject {
         quickCaptureDraft = nil
         attemptedQuickCaptureRequest = nil
         quickCaptureError = nil
+        screenshotPreviewData = nil
+        screenshotExtractionSummary = nil
+        lastExtractedScreenshotText = nil
+        screenshotMediaType = "image/png"
+        isExtractingScreenshot = false
     }
 
     func retryEnrichment(id: String) async {

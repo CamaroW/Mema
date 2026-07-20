@@ -6,8 +6,8 @@ interpretation as separate, searchable layers.
 
 This repository now contains the complete integrated product tree:
 
-- `apps/macos/` — SwiftUI/AppKit clipboard capture, library, detail, lifecycle,
-  and search client;
+- `apps/macos/` — SwiftUI/AppKit clipboard and screenshot-note capture,
+  library, detail, lifecycle, and search client;
 - `apps/chrome-extension/` — build-free Manifest V3 web capture extension;
 - `services/backend/` — loopback FastAPI API, SQLite/FTS5 storage, OpenAI
   enrichment, embeddings, and hybrid retrieval;
@@ -35,6 +35,11 @@ Capture source text and an optional user note
 → generate an embedding from the stable §12.1 text projection
 → retrieve it through keyword and semantic search
 ```
+
+The screenshot-note addition follows the same pipeline: select a screen region,
+choose the default **GPT · Cloud** extractor or **Apple Vision · On device**,
+then explicitly add the extracted text to the editable note. Screenshot bytes
+are temporary and are not written to SQLite; only the extracted text is saved.
 
 ## Start the backend
 
@@ -106,8 +111,10 @@ generated origin to the untracked root `.env` and restart the backend.
 ## Current status
 
 The hardened backend, Chrome extension, and macOS client have been assembled and
-verified in one integration tree. The current tree passes 190 backend tests,
+verified in one integration tree. Baseline counts were 190 backend tests,
 all 44 deterministic stress scenarios, 16 extension tests, and 27 macOS tests.
+The screenshot-note branch adds backend OCR coverage and passes 37 macOS tests,
+including the production Apple Vision extractor.
 Live verification covers provider-off keyword fallback, real OpenAI enrichment
 and embeddings, semantic retrieval with a non-null score, and both selected-text
 and no-selection Chrome Captures appearing as ready cards in the macOS app.

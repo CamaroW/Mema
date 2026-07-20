@@ -10,6 +10,7 @@ enum CaptureStatus: String, Codable, CaseIterable, Sendable {
 enum CaptureSourceType: String, Codable, Sendable {
     case web
     case clipboard
+    case screenshot
 }
 
 struct Capture: Codable, Identifiable, Hashable, Sendable {
@@ -91,8 +92,14 @@ struct Capture: Codable, Identifiable, Hashable, Sendable {
     }
 
     var sourceLabel: String {
-        sourceApp?.nonEmptyTrimmed
-            ?? (sourceType == .web ? "Web" : "Clipboard")
+        if let sourceApp = sourceApp?.nonEmptyTrimmed {
+            return sourceApp
+        }
+        switch sourceType {
+        case .web: return "Web"
+        case .clipboard: return "Clipboard"
+        case .screenshot: return "Screenshot"
+        }
     }
 
     var sourceURLValue: URL? {
