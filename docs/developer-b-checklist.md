@@ -1276,6 +1276,19 @@ Use IDs `B-###`. Never delete an entry; append resolution and date.
 Use IDs `E-###`. Record the original symptom and the resolution. Do not erase
 resolved errors.
 
+## E-055 — Job-level environment referenced the runner context too early
+
+- Date: 2026-07-20
+- Status: Resolved 2026-07-20
+- Evidence: GitHub Actions run `29788040282`
+- Symptom: The corrected workflow still failed before creating jobs because
+  `runner.temp` is unavailable in `jobs.<job_id>.env` while GitHub is preparing
+  the job.
+- Resolution: Scoped `RECALL_DERIVED_DATA_PATH` to the macOS test step, where
+  the `runner` context is available.
+- Project impact: Workflow-only correction; the test continues to use the
+  runner's disposable temporary directory.
+
 ## E-054 — First cloud CI parse rejected a hyphenated job reference
 
 - Date: 2026-07-20
