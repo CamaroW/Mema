@@ -740,6 +740,19 @@ def test_overlong_content_fails_visibly(
     assert_validation_error(client.post("/v1/captures", json=payload))
 
 
+def test_selected_text_at_exact_limit_succeeds(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, _ = api_client
+    payload = fixture_request()
+    payload["selected_text"] = "x" * 12_000
+
+    response = client.post("/v1/captures", json=payload)
+
+    assert response.status_code == 202
+    assert response.json()["selected_text"] == payload["selected_text"]
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

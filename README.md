@@ -122,7 +122,7 @@ generated origin to the untracked root `.env` and restart the backend.
 The hardened backend, Chrome extension, and macOS client have been assembled and
 verified in one integration tree. Baseline counts were 190 backend tests,
 all 44 deterministic stress scenarios, 16 extension tests, and 27 macOS tests.
-The screenshot-note hardening tree passes 212 backend tests, 44/44 stress
+The screenshot-note hardening tree passes 213 backend tests, 44/44 stress
 scenarios, 16 extension tests, and 43 macOS tests, including the production
 Apple Vision extractor.
 Live verification covers provider-off keyword fallback, real OpenAI enrichment

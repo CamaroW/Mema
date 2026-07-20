@@ -10,14 +10,14 @@ Current phase: screenshot-to-notes pre-merge hardening; manual gates B-012/B-013
 
 Current branch: `codex/pr4-hardening`
 
-Last published feature commit: `f32bb37`; hardening commit pending
+Last published feature commit: `f32bb37`; hardening commit `5e27c03` pushed
 
 Canonical target: `main`
 
 Integration inputs: hardened backend and Chrome tree at `5ea3d2a`, macOS client
 at `12862d3`, backend recovery/startup work at `40c07f0`, keyboard-first Chrome
 capture at `b3a524a`, and current shared contracts/documentation. Their histories
-are combined on `main`. The current hardening tree passes 212 backend tests,
+are combined on `main`. The current hardening tree passes 213 backend tests,
 44/44 stress scenarios, 16 extension tests, and 43 macOS tests.
 
 Last baseline cross-check: 2026-07-18 against all sections of
@@ -58,10 +58,10 @@ Update protocol:
 | 5 | FTS5 keyword retrieval | Complete | Commit `d34a567` pushed; 119 tests and provider-off live/restart proof pass |
 | 6 | Chrome capture | Complete / shortcut polish awaiting manual check | 16 automated tests pass; earlier unpacked selected-text/no-selection Captures displayed in macOS resolve B-009 |
 | 7 | Embeddings and hybrid retrieval | Complete | Real embedding and vague semantic-query proof with non-null score resolve B-008 |
-| 8 | Reliability and demo readiness | P0 integration verified / backlog reduced | Current branch passes 212 backend tests and 44/44 stress scenarios; stale-process recovery, version-aware one-command startup, and 16 Chrome tests are verified |
+| 8 | Reliability and demo readiness | P0 integration verified / backlog reduced | Current branch passes 213 backend tests and 44/44 stress scenarios; stale-process recovery, version-aware one-command startup, and 16 Chrome tests are verified |
 | 9 | Optional Apple on-device path | Gated | Decision D-008 accepted; prerequisites unmet |
 | 10 | Final freeze and submission | Pending | Not started |
-| Addition | Screenshot-to-notes OCR | Hardened locally / manual proof pending | Draft PR #4 supplied the feature; the hardening tree passes 212 backend, 16 extension, and 43 macOS tests; B-012/B-013 track live demo proof |
+| Addition | Screenshot-to-notes OCR | Hardened locally / manual proof pending | Draft PR #4 supplied the feature; the hardening tree passes 213 backend, 16 extension, and 43 macOS tests; B-012/B-013 track live demo proof |
 
 The D-023 integration closes B-010, the macOS slice closes B-006, and real
 provider plus unpacked-Chrome evidence closes B-007, B-008, and B-009. B-011 is
@@ -93,7 +93,7 @@ B-012/B-013 remain pre-merge manual demo-proof gates
   close; migration 003 preserves old rows and rebuilds synchronized FTS.
 - [x] Test malformed images, provider failure/refusal/empty output, source limits,
   local extraction, API paths, and the complete existing regression suite.
-  Evidence: 212 backend tests, 44/44 stress scenarios, 16 extension tests plus
+  Evidence: 213 backend tests, 44/44 stress scenarios, 16 extension tests plus
   syntax checks, and 43 macOS tests.
 - [x] Add explicit Screen Recording permission preflight and an actionable
   System Settings error; clear screenshot memory on every dismissal path and
@@ -102,14 +102,15 @@ B-012/B-013 remain pre-merge manual demo-proof gates
   pre-migration database backup and pre-feature Git tag before merge. The
   ignored mode-0600 backup
   `data/backups/recall-pre-migration-003-20260720.db` verifies `integrity_check=ok`
-  at schema `1,2`; annotated tag `rollback/pre-screenshot-ocr` points to
-  `62d8c56` and awaits the authenticated publish step.
+  at schema `1,2`; pushed annotated tag `rollback/pre-screenshot-ocr` points to
+  `62d8c56`.
 - [x] Document the privacy boundary, demo flow, API surface, errors, and the
   deliberate difference from the outline's deferred full image-memory work.
 - [x] Developer B committed with `unsupervised push` in the commit message,
   pushed `agent/screenshot-notes-ocr`, and opened draft PR #4.
-- [~] Publish `codex/pr4-hardening` as the reviewed successor, close B-012/B-013,
-  then supersede PR #4 and merge the hardened branch into `main`.
+- [~] The reviewed successor `codex/pr4-hardening` and its rollback tag are
+  pushed. Open its draft PR, close B-012/B-013, then supersede PR #4 and merge
+  the hardened branch into `main`.
 
 ## Scope, schedule, and collaboration guardrails
 
