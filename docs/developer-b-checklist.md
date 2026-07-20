@@ -6,9 +6,9 @@ Project: Recall
 
 Last updated: 2026-07-20
 
-Current phase: screenshot-to-notes addition published; manual gates B-012/B-013 pending
+Current phase: browser inline-capture Phase 1 specified; runtime not started; screenshot manual gates B-012/B-013 remain pending
 
-Current branch: `agent/screenshot-notes-ocr`
+Current branch: `agent/browser-inline-capture`
 
 Last verified implementation commit: `fc23cdf`
 
@@ -62,6 +62,7 @@ Update protocol:
 | 9 | Optional Apple on-device path | Gated | Decision D-008 accepted; prerequisites unmet |
 | 10 | Final freeze and submission | Pending | Not started |
 | Addition | Screenshot-to-notes OCR | Published / manual proof pending | Commit `fc23cdf`, draft PR #4, 210 backend, 16 extension, and 37 macOS tests pass; B-012/B-013 track live demo proof |
+| Addition | Inline browser capture | Phase 1 complete / runtime not started | D-028 and `docs/browser-inline-capture-spec.md` define interaction, permissions, ownership, and independent Phase 2/3 gates |
 
 The D-023 integration closes B-010, the macOS slice closes B-006, and real
 provider plus unpacked-Chrome evidence closes B-007, B-008, and B-009. B-011 is
@@ -98,6 +99,30 @@ manual demo-proof gates rather than unfinished code
   deliberate difference from the outline's deferred full image-memory work.
 - [x] Commit with `unsupervised push` in the commit message, push branch
   `agent/screenshot-notes-ocr`, and open draft PR #4.
+
+## Active addition — inline browser capture and browser region screenshot
+
+Status: `[x]` Phase 1 interaction contract complete; Phase 2 and Phase 3 runtime
+implementation have not started
+
+- [x] Scale the addition into an independently shippable selected-text slice
+  and a separately gated browser-region screenshot slice.
+- [x] Specify the transient **Add to REcall** pill, compact comment composer,
+  focus behavior, dismissal rules, feedback states, and retry behavior.
+- [x] Define optional site access and the rule that source content is not
+  stored, logged, or transmitted before explicit Save.
+- [x] Record the Chrome platform boundary: an extension cannot observe an
+  arbitrary macOS screenshot, and Apple Vision remains a native-app path.
+- [x] Confirm that selected text reuses `POST /v1/captures` and browser-region
+  OCR reuses `/v1/ocr`; no database, enrichment, or search schema change is
+  authorized by Phase 1.
+- [x] Assign Chrome content script, service worker, permission UI, browser crop,
+  and automated extension testing to Developer B. Native screenshot UI remains
+  Developer A's owned path.
+- [ ] Phase 2: implement and verify opt-in inline selected-text capture.
+- [ ] Phase 3: implement and verify explicit browser-region screenshot capture.
+- [ ] Run a real unpacked-extension interaction matrix and record demo evidence
+  before either runtime phase is marked complete.
 
 ## Scope, schedule, and collaboration guardrails
 
@@ -1318,6 +1343,21 @@ resolved errors.
 - Resolution: Used the already authenticated GitHub CLI as the publishing
   workflow's documented fallback and opened draft PR #4:
   `https://github.com/CamaroW/capture/pull/4`.
+
+## E-054 — Focused checklist test stalled during collection
+
+- Date: 2026-07-20
+- Status: Open tooling observation; not a Phase 1 product blocker
+- Symptom: The focused `test_checklist.py` command produced no result for more
+  than 90 seconds. A second verbose run reached pytest collection but collected
+  no tests before it was interrupted after 34 seconds.
+- Current handling: The command was stopped and is not reported as passing.
+  Phase 1 changes only Markdown; `git diff --check`, direct diff inspection,
+  decision-index inspection, and checklist-format inspection pass. The focused
+  test should be rerun from the normal unrestricted development shell before a
+  runtime phase is merged.
+- Project impact: No runtime file changed. This remains visible verification
+  debt rather than evidence of an application failure.
 
 ## E-038 — First real provider call returned HTTP 429
 

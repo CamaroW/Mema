@@ -41,6 +41,7 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-025 | Keyboard-first Chrome capture polish | Addition | Accepted by user direction |
 | D-026 | Deterministic macOS command-line test runner | Reliability safeguard | Accepted |
 | D-027 | Transient screenshot OCR into the existing Capture pipeline | Addition | Implemented; B-012 tracks live GPT proof |
+| D-028 | Opt-in inline browser capture and explicit browser-region screenshots | Addition | Phase 1 accepted; runtime not started |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -597,6 +598,43 @@ FTS table. No image column is added.
 This decision does not authorize background screen monitoring, automatic OCR,
 full screenshot persistence, image embeddings, chart understanding, or a new
 navigation system. Those remain deferred.
+
+## D-028 — Opt-in inline browser capture and explicit browser-region screenshots
+
+- Classification: Addition approved by explicit user direction
+- Status: Phase 1 interaction and privacy contract accepted; runtime not started
+- Product impact: Adds a transient capture action beside completed webpage
+  selections and scopes a matching REcall-initiated browser screenshot flow
+- Schedule impact: Phase 2 text selection is medium; Phase 3 screenshot capture
+  is independently gated and must not destabilize the selection path
+
+The existing Chrome toolbar and keyboard capture remain supported. After the
+user explicitly grants optional HTTP and HTTPS site access, a lightweight
+content script may observe a completed selection locally and display a
+transient **Add to REcall** action. Merely selecting text must not transmit,
+store, or log the selection, change page layout, steal focus, or interfere with
+normal page behavior. The exact states and dismissal rules are defined in
+[`browser-inline-capture-spec.md`](browser-inline-capture-spec.md).
+
+The inline composer preserves the existing separation among source material,
+the optional personal comment, and AI interpretation. It delivers through a
+shared extension service-worker boundary and the existing `POST /v1/captures`
+contract. Toolbar, shortcut, and inline entry points must reuse validation,
+idempotency, error mapping, and localhost behavior rather than create parallel
+request implementations.
+
+Chrome cannot detect arbitrary macOS screenshots. The browser screenshot path
+therefore begins only from an explicit REcall **Capture Region** action, captures
+a region of the visible tab, and uses the existing GPT `/v1/ocr` boundary before
+saving extracted text as `source_type: screenshot`. Cloud processing must be
+disclosed before upload, screenshot bytes remain transient, and page title and
+URL remain source metadata. Apple Vision continues to belong to the native
+macOS flow; the browser UI must not claim that GPT browser OCR is on-device.
+
+Phase 2 selected-text capture may ship independently. Phase 3 browser screenshot
+capture cannot block it and does not authorize passive screenshot monitoring,
+full-page snapshots, persistent image memories, image embeddings, or general
+image understanding.
 
 ## Pending decisions
 
