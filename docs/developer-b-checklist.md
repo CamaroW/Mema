@@ -4,21 +4,21 @@ Owner: Developer B — Intelligence and Data
 
 Project: Recall
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 Current phase: shared P0 integration verified; Layer 10 submission work open
 
-Current branch: `agent/backend-recovery-dev-start`
+Current branch: `main`
 
-Last verified commit: final integration tree (see Git history)
+Last verified commit: current branch HEAD (see Git history)
 
-Canonical target: `main` via the verified `codex/final-integration` tree
+Canonical target: `main`
 
 Integration inputs: hardened backend and Chrome tree at `5ea3d2a`, macOS client
-at `12862d3`, and current shared contracts/documentation. Their histories are
-combined in the final integration that restores `main`. This improvement branch
-passes 190 backend tests and all 44 stress scenarios; the unchanged Chrome and
-macOS evidence remains 13 and 27 tests respectively.
+at `12862d3`, backend recovery/startup work at `40c07f0`, keyboard-first Chrome
+capture at `b3a524a`, and current shared contracts/documentation. Their histories
+are combined on `main`. The current tree passes 190 backend tests, 44/44 stress
+scenarios, 16 extension tests, and 27 macOS tests.
 
 Last baseline cross-check: 2026-07-18 against all sections of
 `docs/product-plan.md`
@@ -56,9 +56,9 @@ Update protocol:
 | 3 | Capture CRUD and first integration | Complete | Backend CRUD plus live macOS list/detail/clipboard evidence close D-013 and B-006 |
 | 4 | OpenAI enrichment | Complete | Deterministic coverage plus real Responses API `processing → ready` proof resolve B-007 |
 | 5 | FTS5 keyword retrieval | Complete | Commit `d34a567` pushed; 119 tests and provider-off live/restart proof pass |
-| 6 | Chrome capture | Complete | 13 tests plus unpacked selected-text/no-selection Captures displayed in macOS resolve B-009 |
+| 6 | Chrome capture | Complete / shortcut polish awaiting manual check | 16 automated tests pass; earlier unpacked selected-text/no-selection Captures displayed in macOS resolve B-009 |
 | 7 | Embeddings and hybrid retrieval | Complete | Real embedding and vague semantic-query proof with non-null score resolve B-008 |
-| 8 | Reliability and demo readiness | P0 integration verified / backlog reduced | Current branch passes 190 backend tests and 44/44 stress scenarios; stale-process recovery and one-command startup are verified |
+| 8 | Reliability and demo readiness | P0 integration verified / backlog reduced | Current tree passes 190 backend tests and 44/44 stress scenarios; stale-process recovery, one-command startup, and 16 Chrome tests are verified |
 | 9 | Optional Apple on-device path | Gated | Decision D-008 accepted; prerequisites unmet |
 | 10 | Final freeze and submission | Pending | Not started |
 
@@ -821,6 +821,13 @@ authorized follow-up remediation and its exact contract additions.
 
 ## Build tasks
 
+- [x] Polish the Chrome demo path under D-025: add the extension shortcut,
+  keyboard submission, brief success confirmation with automatic close,
+  contract-limit validation, and stable retry identity. All 16 automated
+  extension tests and JavaScript/JSON syntax checks pass.
+- [ ] Load the integrated extension unpacked in Chrome and confirm the suggested
+  shortcut is available, `Command+Enter` submits once, the success state remains
+  legible, and the popup closes after its 700 ms confirmation.
 - [x] Recover stale `processing` records after restart. The transactional
   startup transition preserves source/user content, exposes a retryable error,
   and passes focused lifecycle coverage, the 190-test suite, and 44/44 stress
@@ -1392,6 +1399,21 @@ resolved errors.
 - Project impact: Test robustness only; the endpoint and dashboard output were
   correct during the failed assertion.
 
+## E-042 — First chained integration merge reported `stash failed`
+
+- Date: 2026-07-20
+- Status: Resolved 2026-07-20
+- Symptom: After fast-forwarding the desktop checkout to `origin/main`, the
+  first chained merge command stopped before merging either improvement branch
+  with `fatal: stash failed`.
+- Resolution: Verified that `main` and both feature worktrees were clean, found
+  no active hooks or auto-stash configuration, and reran the backend merge as a
+  standalone command. It completed normally. The subsequent Chrome merge had
+  only the expected README/checklist content conflicts, which were reconciled
+  explicitly to retain both improvements.
+- Project impact: No code or uncommitted work was lost; the failure occurred
+  before the first feature merge changed `main`.
+
 ## E-001 — Official OpenAI docs MCP could not initially install
 
 - Date: 2026-07-18
@@ -1692,3 +1714,19 @@ resolved errors.
   generated paths and verified that none remained.
 - Project impact: None; live verification had completed and no repository file
   was targeted.
+
+## E-025 — Review worktree lacked npm and backend test dependencies
+
+- Date: 2026-07-19
+- Status: Resolved for the changed extension scope
+- Symptom: `npm test` returned `command not found`, and the fresh detached
+  review worktree had no backend virtual environment or system `pytest`.
+- Cause: The review shell did not expose npm, and intentionally untracked
+  virtual environments do not follow a Git worktree.
+- Resolution: Loaded the bundled workspace runtime and ran the dependency-free
+  suite directly with Node; all 16 extension tests, JavaScript syntax checks,
+  and manifest/package JSON validation pass. No backend code changed, so the
+  prior 186-test and 44/44 stress evidence remains recorded rather than falsely
+  described as freshly rerun.
+- Project impact: The Chrome improvement is verified automatically. A real
+  unpacked-extension shortcut/auto-close check remains explicit above.
