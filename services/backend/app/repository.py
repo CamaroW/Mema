@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, get_args
@@ -333,6 +333,33 @@ class CaptureRepository:
                 (capture_id,),
             ).fetchall()
         return [_row_to_attachment(row) for row in rows]
+
+    def list_attachments_for_captures(
+        self,
+        capture_ids: Iterable[str],
+    ) -> dict[str, list[AttachmentRecord]]:
+        """Load attachments for a response page without one query per Capture."""
+
+        unique_ids = list(dict.fromkeys(capture_ids))
+        attachments_by_capture = {capture_id: [] for capture_id in unique_ids}
+        if not unique_ids:
+            return attachments_by_capture
+
+        placeholders = ", ".join("?" for _ in unique_ids)
+        with database_connection(self.database_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM capture_attachments
+                WHERE capture_id IN ({placeholders})
+                ORDER BY capture_id ASC, sort_order ASC, created_at ASC
+                """,
+                unique_ids,
+            ).fetchall()
+
+        for row in rows:
+            attachment = _row_to_attachment(row)
+            attachments_by_capture[attachment.capture_id].append(attachment)
+        return attachments_by_capture
 
     def get_attachment(self, attachment_id: str) -> AttachmentRecord | None:
         with database_connection(self.database_path) as connection:

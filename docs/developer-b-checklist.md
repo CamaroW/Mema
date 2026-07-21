@@ -43,7 +43,7 @@ real-device acceptance on 2026-07-21.
 D-037 now adds one persisted screenshot image per Capture, an independent note,
 an off-by-default visual-analysis preference, background OCR/visual enrichment
 through the existing searchable fields, library/detail rendering, and deletion
-of both metadata and the local file. The feature branch passes 233 backend and
+of both metadata and the local file. The feature branch passes 234 backend and
 156 macOS tests. Signed real-device provider-off/provider-on acceptance remains
 open; no claim of live privacy or visual-search acceptance is made yet.
 
@@ -99,7 +99,7 @@ Update protocol:
 | Safeguard | Chrome action popup sizing | Complete and real-Chrome verified | D-033 uses a 344 × 510 root without viewport-height feedback; 68/68 tests and selected/metadata layouts pass |
 | Addition | Native Accessibility selection | Implemented; primary path accepted | D-034 adds explicit `Option+Shift+Command+S`, fail-closed AX reading, anchored review, safe v1 shortcut migration, and 108/108 macOS tests; user acceptance passed on 2026-07-21 |
 | Addition | Clipboard selection compatibility | Complete and real-device accepted | D-035 adds an off-by-default transactional synthetic-Copy fallback with exact-control and application-scoped tickets; 149/149 host tests and B-016 user acceptance pass |
-| Addition | Persisted image notes and visual indexing | Implemented; signed acceptance pending | D-037 adds one bounded local image, separate note, off-by-default background AI, existing-search reuse, rendering, retry, and deletion; 233 backend and 156 macOS tests pass |
+| Addition | Persisted image notes and visual indexing | Implemented; signed acceptance pending | D-037 adds one bounded local image, separate note, off-by-default background AI, existing-search reuse, rendering, retry, and deletion; 234 backend and 156 macOS tests pass |
 
 The D-023 integration closes B-010, the macOS slice closes B-006, and real
 provider plus unpacked-Chrome evidence closes B-007, B-008, and B-009. B-011 is
@@ -131,7 +131,7 @@ acceptance and PR review pending
 - [x] Verify invalid images, idempotent retries, provider-off preservation,
   provider-on OCR/visual search, attachment reads, deletion, migration, health,
   networking, preference persistence, upload retry, image loading, and old-
-  backend decoding. Evidence: 233/233 backend and 156/156 macOS tests.
+  backend decoding. Evidence: 234/234 backend and 156/156 macOS tests.
 - [ ] On the stably signed app, verify one provider-off image never reaches
   OpenAI, one provider-on image becomes searchable by a visual concept absent
   from its OCR, restart persistence, full-resolution detail display, retry, and
@@ -2478,7 +2478,24 @@ resolved errors.
   execution.
 - Resolution: Used the backend-local `.venv/bin/python`, loaded the bundled Node
   runtime and ran the extension suite directly, then assigned both async Swift
-  results before asserting them. Final evidence is 233/233 backend, 44/44
+  results before asserting them. Final evidence is 234/234 backend, 44/44
   stress, 68/68 Chrome, and 156/156 macOS tests.
 - Project impact: Verification harness only; no production-code assertion or
   product behavior failed.
+
+## E-060 — Image attachment responses introduced an N+1 search query
+
+- Date: 2026-07-21
+- Status: Resolved
+- Symptom: The image-notes pull request passed all functional checks, but the
+  Linux stress runner recorded 50/50 successful concurrent vector searches with
+  a maximum latency of 2039.688 ms, narrowly exceeding the 2-second guard.
+- Cause: Every Capture serialized by collection and search endpoints loaded its
+  attachment metadata with a separate SQLite query. A 100-result search therefore
+  performed 100 avoidable attachment queries in addition to search itself.
+- Resolution: Added one bounded attachment query for the complete result set and
+  passed the grouped metadata into response serialization. A regression test now
+  rejects per-Capture attachment reads from library and search responses while
+  verifying image metadata remains present.
+- Project impact: No result or attachment was lost, but this removed a real
+  performance regression instead of weakening the existing stress threshold.

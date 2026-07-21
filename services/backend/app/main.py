@@ -69,7 +69,7 @@ from app.limits import (
     SEARCH_QUERY_MAX_LENGTH,
     SCREENSHOT_MAX_BYTES,
 )
-from app.models import CaptureRecord
+from app.models import AttachmentRecord, CaptureRecord
 from app.ocr import OCRFailure, OCRProvider, OpenAIOCRProvider
 from app.repository import (
     CaptureAlreadyProcessingError,
@@ -240,10 +240,14 @@ def get_image_enrichment_provider() -> ImageEnrichmentProvider | None:
 def capture_response(
     repository: CaptureRepository,
     record: CaptureRecord,
+    *,
+    attachments: list[AttachmentRecord] | None = None,
 ) -> CaptureResponse:
     return CaptureResponse.from_record(
         record,
-        repository.list_attachments(record.id),
+        repository.list_attachments(record.id)
+        if attachments is None
+        else attachments,
     )
 
 
@@ -498,8 +502,18 @@ def list_captures(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> CaptureListResponse:
     records = repository.list_captures(limit=limit, offset=offset)
+    attachments_by_capture = repository.list_attachments_for_captures(
+        record.id for record in records
+    )
     return CaptureListResponse(
-        items=[capture_response(repository, record) for record in records],
+        items=[
+            capture_response(
+                repository,
+                record,
+                attachments=attachments_by_capture[record.id],
+            )
+            for record in records
+        ],
         limit=limit,
         offset=offset,
     )
@@ -519,11 +533,18 @@ def search_captures(
         query=q,
         limit=limit,
     )
+    attachments_by_capture = repository.list_attachments_for_captures(
+        match.capture.id for match in matches
+    )
     return SearchResponse(
         query=q,
         results=[
             SearchResult(
-                capture=capture_response(repository, match.capture),
+                capture=capture_response(
+                    repository,
+                    match.capture,
+                    attachments=attachments_by_capture[match.capture.id],
+                ),
                 score=match.score,
                 keyword_score=match.keyword_score,
                 semantic_score=match.semantic_score,

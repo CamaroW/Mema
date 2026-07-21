@@ -157,6 +157,7 @@ def test_omitting_analysis_flag_fails_private_and_does_not_call_provider(
 
 def test_image_note_ai_analysis_populates_searchable_ocr_and_visual_fields(
     image_api_client: tuple[TestClient, Path],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _ = image_api_client
     provider = SuccessfulImageProvider()
@@ -177,10 +178,27 @@ def test_image_note_ai_analysis_populates_searchable_ocr_and_visual_fields(
     assert loaded["tags"] == ["logistic growth", "differential equations"]
     assert provider.calls == [(created["id"], png_image(), "image/png")]
 
+    def reject_per_capture_attachment_query(
+        _repository: object,
+        _capture_id: str,
+    ) -> list[object]:
+        raise AssertionError("collection responses must batch attachment metadata")
+
+    monkeypatch.setattr(
+        "app.repository.CaptureRepository.list_attachments",
+        reject_per_capture_attachment_query,
+    )
+    library = client.get("/v1/captures")
     search = client.get("/v1/search", params={"q": "绝对值消消乐"})
+
+    assert library.status_code == 200
+    assert library.json()["items"][0]["attachments"] == created["attachments"]
     assert search.status_code == 200
     assert [item["capture"]["id"] for item in search.json()["results"]] == [
         created["id"]
+    ]
+    assert search.json()["results"][0]["capture"]["attachments"] == created[
+        "attachments"
     ]
 
 

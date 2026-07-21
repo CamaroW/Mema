@@ -259,7 +259,7 @@ D-037 adds the first persisted image-note vertical slice on
 separate note, display it in library/detail views, delete it with its local
 file, and—only with explicit opt-in—run background OCR plus visual indexing into
 the existing search fields. Provider errors keep the original safe and support
-the ordinary **Retry AI** action. Automated verification currently passes 233
+the ordinary **Retry AI** action. Automated verification currently passes 234
 backend and 156 macOS tests; signed real-device image/AI acceptance remains the
 feature's final gate.
 
