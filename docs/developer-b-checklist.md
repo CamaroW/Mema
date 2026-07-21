@@ -6,12 +6,12 @@ Project: Recall
 
 Last updated: 2026-07-21
 
-Current phase: Chrome action popup sizing correction complete; native
-Accessibility selection next
+Current phase: Native Accessibility selection implemented; real-device
+acceptance and PR review pending
 
-Implementation branch: `codex/fix-chrome-popup-sizing`
+Implementation branch: `codex/native-accessibility-selection`
 
-Branch base: `b028e83` (PR #11 merge commit)
+Branch base: `42f565a` (PR #12 merge commit)
 
 Canonical target: `main`
 
@@ -31,6 +31,14 @@ with Recall's main window closed, and the clipboard shortcut opened Capture
 after copied text. D-033 also restores the Chrome action popup's full 344 × 510
 layout after a viewport-relative sizing regression; 68/68 tests and selected
 plus metadata-only real-Chrome checks pass.
+
+D-034 now adds explicit native selection capture through a third configurable
+shortcut, background AX reading, secure/protected-content rejection, transient
+selection bounds, anchored Quick Capture, and backward-compatible shortcut
+migration. The host macOS suite passes 108/108, and the user accepted the
+primary AX path. WeChat then exposed an expected unsupported-control gap;
+D-035 is implemented with a 149/149 host suite, and B-016 closed after final
+real-device acceptance on 2026-07-21.
 
 Last baseline cross-check: 2026-07-18 against all sections of
 `docs/product-plan.md`
@@ -82,6 +90,8 @@ Update protocol:
 | Addition | Native global capture | Complete and real-device verified | D-031 adds transactional Carbon shortcuts and one app-level capture coordinator; PR #10 merged at `0ab687b`; B-014 is closed |
 | Safeguard | Stable Screen Recording identity | Complete and live-verified | D-032 passes 70/70 macOS tests; app-specific reset, authorization, rebuild persistence, selector launch, and cancellation pass |
 | Safeguard | Chrome action popup sizing | Complete and real-Chrome verified | D-033 uses a 344 × 510 root without viewport-height feedback; 68/68 tests and selected/metadata layouts pass |
+| Addition | Native Accessibility selection | Implemented; primary path accepted | D-034 adds explicit `Option+Shift+Command+S`, fail-closed AX reading, anchored review, safe v1 shortcut migration, and 108/108 macOS tests; user acceptance passed on 2026-07-21 |
+| Addition | Clipboard selection compatibility | Complete and real-device accepted | D-035 adds an off-by-default transactional synthetic-Copy fallback with exact-control and application-scoped tickets; 149/149 host tests and B-016 user acceptance pass |
 
 The D-023 integration closes B-010, the macOS slice closes B-006, and real
 provider plus unpacked-Chrome evidence closes B-007, B-008, and B-009. B-011 is
@@ -305,6 +315,73 @@ complete
   press `Option+Shift+Command+4`, and complete one non-empty region. After
   copying text, physically press `Option+Shift+Command+C` and confirm that
   Capture opens. The user completed both real-device checks on 2026-07-21.
+
+## Active addition — native Accessibility selection
+
+Status: `[x]` D-034 implementation, 108/108 host tests, PR #13, and
+primary-path user acceptance complete on `codex/native-accessibility-selection`;
+D-035/B-016 compatibility acceptance is also complete
+
+- [x] Add a third configurable **Selection capture** action with default
+  `Option+Shift+Command+S`, generic three-way duplicate validation, and the
+  existing whole-set registration transaction.
+- [x] Migrate stored two-action `globalShortcutConfiguration.v1` values without
+  losing customized screenshot/clipboard choices. Persist the additive field;
+  if only the new default is externally occupied, disable it while preserving
+  the two established registrations.
+- [x] Read only after an explicit shortcut/menu command. Check Accessibility
+  trust before attributes; reject Recall itself, secure text fields, protected
+  content, missing/empty/unsupported selections, and input over 12,000
+  characters. Do not simulate copy, inspect a window title, or read surrounding
+  content.
+- [x] Run cross-process AX work outside the main actor with bounded messaging
+  timeouts and cancellation propagation. Treat range/bounds as optional so
+  readable text still opens review when positioning metadata is unavailable.
+- [x] Reuse the existing Quick Capture and idempotent save pipeline. Distinguish
+  the native `.selection` draft in UI while mapping Save to the existing
+  clipboard-text contract. Submit no URL, title, surrounding context, range, or
+  screen bounds.
+- [x] Convert AX global coordinates against the current primary-screen layout,
+  choose the display with the greatest selection intersection, position after
+  SwiftUI layout, and clamp the 500-point review window to `visibleFrame`.
+  Invalid/offscreen bounds center on the current mouse screen.
+- [x] Add permission status/request UI, an explicit System Settings route,
+  honest current-clipboard recovery, and menu-bar Selection capture.
+- [x] Pass 108/108 host tests covering AX ordering/privacy, exact Unicode,
+  contract mapping, cancellation/late results, oversize rejection, source-app
+  bounds, shortcut migration/conflict rollback, and window geometry/request
+  gating.
+- [x] Open non-auto-merged draft PR #13 and obtain user confirmation that the
+  primary Accessibility path works on the stably signed app.
+
+## Completed privacy/compatibility safeguard — transactional clipboard fallback
+
+Status: `[x]` D-035 implementation, its 149/149 host suite, and B-016 user
+acceptance are complete; the user authorized merge on 2026-07-21
+
+- [x] Keep the primary D-034 Accessibility path unchanged and add a separately
+  persisted **Clipboard Compatibility Mode** that is off by default.
+- [x] Carry a fallback ticket from the exact frontmost application whose direct
+  selection read failed. Bind its focused AX element when available; use an
+  application-scoped ticket for custom-drawn apps that omit it. Permission/self,
+  known secure/protected, empty, oversized, and pre-transaction cancellation
+  failures may not synthesize Copy.
+- [x] Revalidate the same PID, the exact element when available, exposed safety
+  evidence, event-posting access, and Secure Event Input immediately
+  before injection, after waiting for the shortcut modifiers to be released.
+- [x] Deep-copy bounded ordered pasteboard items/types into in-memory Data
+  before Copy. Abort before mutation when any representation cannot be
+  materialized or the item/type/64 MiB limits are exceeded.
+- [x] Treat `changeCount` as a race signal, not ownership proof. Require two Copy
+  attempts to produce exact consecutive counts and matching complete payloads
+  from the same target ticket before accepting text or attempting restoration.
+  Never log, persist, submit, or attach the backup.
+- [x] Disclose best-effort restoration and the unavoidable clipboard-history /
+  Universal Clipboard visibility in Settings and fallback review UI, including
+  macOS's missing writer identity/atomic restore and delayed-Copy residual risk.
+- [x] Complete automated service/store/privacy tests and pass the expanded
+  149/149 host suite.
+- [x] Pass B-016 in WeChat and obtain explicit merge authorization.
 
 ## Active reliability correction — stable Screen Recording identity
 
@@ -1548,8 +1625,48 @@ Use IDs `B-###`. Never delete an entry; append resolution and date.
   through the existing capture flow. After copying text, the user physically
   pressed `Option+Shift+Command+C` and Capture opened as expected.
 - Does it block build, deterministic regression, documentation, or live demo
-  proof? No. The real-device global capture acceptance gate is closed; future
-  release candidates should repeat the interaction check.
+proof? No. The real-device global capture acceptance gate is closed; future
+release candidates should repeat the interaction check.
+
+## B-015 — Native Accessibility selection acceptance
+
+- Opened: 2026-07-21
+- Severity: Manual UI/privacy/compatibility gate
+- Status: Closed; primary AX and D-035 compatibility paths were accepted by the
+  user on 2026-07-21
+- Automated evidence: The host macOS suite passes 108/108. It covers permission
+  fail-closed ordering, self/secure/protected-content rejection, exact text,
+  optional bounds, no-context contract mapping, 12,000-character protection,
+  cancellation, v1 shortcut migration and conflicts, and placement geometry.
+- Manual evidence: The user reported the native S shortcut works without an
+  observed regression. WeChat does not expose the selected text through the AX
+  path, which correctly produced failure rather than stale clipboard content
+  and motivated the separately opt-in D-035 fallback.
+- Merge rule: Satisfied by B-016 acceptance and explicit user authorization.
+
+## B-016 — Clipboard Compatibility Mode acceptance
+
+- Opened: 2026-07-21
+- Severity: Manual privacy/data-preservation/compatibility gate
+- Status: Closed on 2026-07-21; the user reported no issue in final WeChat
+  testing and explicitly authorized merging PR #13
+- Automated evidence: 149/149 host tests pass, including eligibility isolation,
+  exact Unicode, default-off and persisted opt-in, exact-control and
+  application-scoped AX tickets,
+  off-main serial transaction, event/security preflight, modifier release,
+  consecutive-count and matching-
+  payload confirmation, stale/late/competing-write rejection, restore failure,
+  12,000-character bounds, no-context API mapping, and no backend request before
+  Save. The deterministic service tests use a fake pasteboard and do not touch
+  the user's general clipboard; real AppKit multi-item/type, image, Finder-file,
+  lazy-provider, and round-trip behavior remains part of this manual gate.
+- Manual evidence: After the application-scoped fallback correction, the user
+  confirmed the WeChat flow works, reported no current issue, and authorized
+  merge. The broader rich-text/image/Finder/lazy-provider and deliberate-race
+  matrix was not separately enumerated in that report; retain it as release
+  regression coverage rather than claiming every format was manually proven.
+- Merge rule: Satisfied. Keep the documented best-effort clipboard limitations
+  and repeat the broader matrix before a release candidate.
 
 # Errors encountered
 

@@ -1,13 +1,19 @@
+import AppKit
 import SwiftUI
 
 struct ShortcutSettingsView: View {
     @EnvironmentObject private var shortcutCenter: GlobalShortcutCenter
+    @EnvironmentObject private var store: RecallStore
     @State private var draft = GlobalShortcutConfiguration.default
     @State private var didApply = false
+    @State private var accessibilityAccessIsGranted = false
+    @State private var isCheckingAccessibilityAccess = false
 
     var body: some View {
         Form {
             Section {
+                shortcutEditor(for: .selection)
+                Divider()
                 shortcutEditor(for: .screenshot)
                 Divider()
                 shortcutEditor(for: .clipboard)
@@ -18,6 +24,71 @@ struct ShortcutSettingsView: View {
                     "Shortcuts work while Recall is running, even when its main window "
                         + "is closed. Each enabled shortcut needs at least two modifier keys. "
                         + "Letter and number choices use their physical U.S. keyboard positions."
+                )
+            }
+
+            Section {
+                HStack {
+                    Label(
+                        accessibilityAccessIsGranted
+                            ? "Accessibility access is enabled"
+                            : "Accessibility access is not enabled",
+                        systemImage: accessibilityAccessIsGranted
+                            ? "checkmark.shield.fill"
+                            : "hand.raised.fill"
+                    )
+                    .foregroundStyle(accessibilityAccessIsGranted ? .green : .orange)
+                    Spacer()
+                    if isCheckingAccessibilityAccess {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if accessibilityAccessIsGranted {
+                        Button("Manage Access…") {
+                            openAccessibilitySettings()
+                        }
+                    } else {
+                        Button("Request Access") {
+                            requestAccessibilityAccess()
+                        }
+                    }
+                }
+                Text(
+                    "Accessibility permission is managed by macOS. Recall can request it "
+                        + "or open System Settings, but cannot turn it off inside the app."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Divider()
+
+                Toggle(
+                    "Clipboard Compatibility Mode",
+                    isOn: Binding(
+                        get: { store.selectionClipboardFallbackIsEnabled },
+                        set: { store.setSelectionClipboardFallbackEnabled($0) }
+                    )
+                )
+                Text(
+                    "For apps such as WeChat that do not expose selected text or a focused "
+                        + "control, Capture Selection can send Copy twice to the verified "
+                        + "frontmost app, confirm matching results, and attempt to restore "
+                        + "the previous clipboard."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } header: {
+                Text("Selection access")
+            } footer: {
+                Text(
+                    "Recall reads selected text only when you use Capture Selection. "
+                        + "Clipboard and screenshot capture do not use Accessibility access. "
+                        + "Recall rejects secure input and protected controls when macOS "
+                        + "exposes them, but custom-drawn apps may omit per-control safety "
+                        + "attributes. "
+                        + "macOS does not expose clipboard-writer identity or an atomic restore, "
+                        + "so rare races or a very delayed Copy can still change the clipboard. "
+                        + "Clipboard history apps and Universal Clipboard may record the "
+                        + "temporary copies."
                 )
             }
 
@@ -57,10 +128,45 @@ struct ShortcutSettingsView: View {
         .padding(.vertical, 8)
         .onAppear {
             draft = shortcutCenter.configuration
+            refreshAccessibilityAccess()
         }
         .onChange(of: shortcutCenter.configuration) {
             draft = shortcutCenter.configuration
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            refreshAccessibilityAccess()
+        }
+    }
+
+    private func refreshAccessibilityAccess() {
+        guard !isCheckingAccessibilityAccess else { return }
+        isCheckingAccessibilityAccess = true
+        Task { @MainActor in
+            accessibilityAccessIsGranted = await store.accessibilityAccessIsGranted()
+            isCheckingAccessibilityAccess = false
+        }
+    }
+
+    private func requestAccessibilityAccess() {
+        guard !isCheckingAccessibilityAccess else { return }
+        isCheckingAccessibilityAccess = true
+        Task { @MainActor in
+            accessibilityAccessIsGranted = await store.accessibilityAccessIsGranted(
+                promptIfNeeded: true
+            )
+            isCheckingAccessibilityAccess = false
+        }
+    }
+
+    private func openAccessibilitySettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     private func shortcutEditor(for action: GlobalShortcutAction) -> some View {

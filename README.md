@@ -8,8 +8,8 @@ interpretation as separate, searchable layers.
 
 This repository now contains the complete integrated product tree:
 
-- `apps/macos/` — SwiftUI/AppKit clipboard and screenshot-note capture,
-  library, detail, lifecycle, and search client;
+- `apps/macos/` — SwiftUI/AppKit Accessibility selection, clipboard, and
+  screenshot-note capture, library, detail, lifecycle, and search client;
 - `apps/chrome-extension/` — build-free Manifest V3 web capture extension;
 - `services/backend/` — loopback FastAPI API, SQLite/FTS5 storage, OpenAI
   enrichment, embeddings, and hybrid retrieval;
@@ -106,11 +106,24 @@ prove Screen Recording authorization. The macOS README documents the one-time
 reset and reauthorization needed when migrating from an earlier ad-hoc build.
 
 Recall remains a normal Dock app and also keeps its existing menu-bar extra.
-While the app is running, global screenshot and clipboard capture default to
-`Option+Shift+Command+4` and `Option+Shift+Command+C`; they remain available
-when the main window is closed. Configure, disable, or restore them in
-**Settings > Global capture shortcuts**. The hotkeys use Carbon registration
-and do not require Accessibility or Input Monitoring permission.
+While the app is running, global selection, screenshot, and clipboard capture
+default to `Option+Shift+Command+S`, `Option+Shift+Command+4`, and
+`Option+Shift+Command+C`; they remain available when the main window is closed.
+Capture Selection reads the focused external app's selected text only after the
+shortcut, then opens the existing review window near that selection. It requires
+macOS Accessibility access. Carbon hotkey registration itself, clipboard
+capture, and screenshot capture do not require Accessibility or Input Monitoring
+permission. Configure, disable, or restore all three actions in **Settings >
+Global capture shortcuts**. An off-by-default **Clipboard Compatibility Mode**
+can handle custom-drawn apps such as WeChat that can copy a selection but do not
+expose selected text or even a focused control to Accessibility. It temporarily
+sends Copy twice to the verified frontmost application, binds to the exact AX
+control when one is available, requires matching results, and makes a best-effort
+restoration. Recall blocks Secure Event Input and known secure/protected controls,
+but custom-drawn apps may omit per-control safety attributes. macOS exposes neither clipboard-writer identity
+nor an atomic restore, so rare races or a very delayed Copy can still change the
+clipboard; history tools or Universal Clipboard may also record the transient
+copies.
 
 ## Load the Chrome extension
 
@@ -213,6 +226,32 @@ a permission error. The macOS suite passes 70/70. B-014 is closed: with Recall's
 main window closed and another app focused, the physical screenshot shortcut
 completed a non-empty region, and the clipboard shortcut opened Capture after
 text was copied.
+
+D-034 adds user-triggered native Accessibility selection capture without
+changing the backend contract or saving surrounding context. The native draft
+is labeled as a selection but submits through the existing text/clipboard source
+contract; selection bounds are used only to position Quick Capture and are never
+persisted. The host suite passes 108/108 tests, including permission and secure-
+field fail-closed behavior, exact Unicode preservation, old shortcut migration,
+cancellation, oversized-source rejection, and multi-screen placement geometry.
+The user accepted the primary native path and the D-035 WeChat compatibility
+path on the stably signed app on 2026-07-21.
+
+D-035 adds the opt-in transactional clipboard fallback requested after initial
+real-device selection testing. It never runs for missing permission, Recall
+itself, known secure/protected content, oversized text, or cancellation before
+the transaction begins. The AX failure produces a ticket for the exact frontmost
+application and, when available, its focused control. That scope is revalidated
+immediately before each of two Copy attempts, together with Secure Event Input
+and any exposed security attributes. Recall accepts only
+two consecutive, matching clipboard results and attempts restoration only while
+the observed change count remains unchanged. This substantially narrows races
+but cannot make restoration atomic or identify the writer. The in-memory backup
+is never logged, persisted, or sent to the backend. The current host suite passes
+149/149 tests. The user reported no issue in final WeChat testing and authorized
+merge; rich text, image, Finder-file, and race cases remain release-regression
+coverage rather than an open merge gate.
+
 Final regression also passes 215 backend tests, 44/44 stress scenarios, and
 68/68 Chrome-extension tests.
 

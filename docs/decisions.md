@@ -47,6 +47,8 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-031 | Native global capture through Carbon and one app-level coordinator | Addition | Implemented and merged through PR #10 at `0ab687b`; real-device acceptance passed |
 | D-032 | Stable development code identity for TCC-protected screenshot capture | Reliability/privacy safeguard | Implemented; 70/70 tests and live TCC rebuild-persistence proof pass |
 | D-033 | Deterministic Chrome action-popup dimensions | Reliability safeguard | Implemented; 68/68 tests and real-Chrome selected/metadata layouts pass |
+| D-034 | User-triggered native Accessibility selection capture | Addition | Implemented; 108/108 host tests and primary-path user acceptance pass |
+| D-035 | Opt-in transactional clipboard fallback for native selection | Compatibility/privacy safeguard | Implemented; 149/149 host tests and user WeChat acceptance pass |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -916,6 +918,98 @@ extension, real Chrome displayed the complete popup on an internal page, a
 regular metadata-only page, and a 72-character selected-text state. The source
 card, preview, note field, Save button, and inline-access setting remained
 visible and reachable; verification did not submit a Capture.
+
+## D-034 — User-triggered native Accessibility selection capture
+
+- Classification: Addition approved by user direction
+- Status: Implemented on `codex/native-accessibility-selection`; 108/108 host
+  tests and primary-path user acceptance pass
+- Product impact: Reduces native selected-text capture to one explicit shortcut
+  and opens the existing review UI near the selection
+- Schedule impact: Primary-path and D-035/B-016 compatibility gates closed
+
+Recall will add a third configurable global action, **Capture Selection**, with
+`Option+Shift+Command+S` as its default. Only after the user invokes that action
+does Recall ask macOS Accessibility for the focused external application's
+selected text, selected range, and—when the application supports it—the range's
+screen bounds. It reads no window title or surrounding context, never simulates
+copy, and does not modify the clipboard. Bounds are transient presentation data
+and are not submitted, logged, or persisted.
+
+The exact selected text within the 12,000-character limit and source application
+enter the existing Quick Capture review, idempotency, and save pipeline. A
+native selection has its own draft and UI label, but it continues to submit as the existing
+`source_type: clipboard`; this addition therefore changes no API, schema,
+database, extension, enrichment, or retrieval contract. Unsupported bounds fall
+back to centering the window on the target screen without turning a valid text
+selection into a failure. Missing permission, secure fields, empty selections,
+unresponsive targets, and unsupported applications fail closed and offer an
+explicit clipboard action rather than silently saving stale clipboard content.
+
+Adding the third action must preserve existing `globalShortcutConfiguration.v1`
+values through backward-compatible decoding. All enabled actions participate in
+duplicate validation and whole-set registration rollback.
+
+Passive selection observation is a separate, later addition. The intended
+future shape is an explicit opt-in setting and a non-activating pill that keeps
+candidate text only in memory, rejects secure fields, debounces and deduplicates
+Accessibility notifications, and opens the existing composer only after a user
+click. Splitting it from this decision keeps permission, one-shot reading,
+cross-application compatibility, and anchored-window behavior independently
+testable while retaining the explicit shortcut as the reliable fallback.
+
+## D-035 — Opt-in transactional clipboard fallback for native selection
+
+- Classification: Compatibility and privacy safeguard approved by user direction
+- Status: Implemented on `codex/native-accessibility-selection`; 149/149 host
+  tests pass and B-016 user acceptance closed on 2026-07-21
+- Product impact: Lets the explicit Capture Selection shortcut work in apps
+  such as WeChat that can copy a selection but do not expose its text through AX
+- Schedule impact: B-016 real-device acceptance passed; user authorized merge
+
+D-034 remains the primary path and continues to read selected text directly
+without touching the clipboard. D-035 adds a separately persisted **Clipboard
+Compatibility Mode** that is off by default. When the user explicitly enables
+it and invokes Capture Selection, the AX reader may issue a fallback ticket for
+the exact frontmost application whose selected-text lookup failed. A stable AX
+focused element is retained when available with complete safety evidence; a
+custom-drawn app that omits that element uses an application-scoped ticket.
+Missing permission, Recall itself, known secure/protected content, whitespace,
+and oversized input never enter this fallback.
+
+The transaction waits for the global shortcut modifiers to be released and
+deep-copies every pasteboard item/type into bounded in-memory Data before event
+injection. Any unmaterializable item, more than 100 items, more than 128 types
+per item, more than 64 MiB total data, or an observed pasteboard race aborts.
+The full AX/pasteboard transaction runs on a serial actor outside `MainActor`,
+so lazy-provider materialization and bounded cross-process AX waits do not block
+the app UI. Immediately before each event sequence, Recall revalidates the ticket's
+frontmost PID, exact AX focused element when available, all exposed safety
+attributes, event-posting access, and Secure Event Input. The backup is never logged, persisted, attached to a
+draft, or sent to the backend.
+
+One `NSPasteboard.changeCount` advance cannot identify who wrote the clipboard.
+Recall therefore sends Copy twice and accepts text only when both attempts
+produce the exact next counts, the same complete materialized payload, the same
+text, and the same verified focus ticket. It attempts restoration from newly
+constructed pasteboard items only after that confirmation and only while the
+last count remains unchanged. Detected ambiguity, timeout, focus change, or
+payload mismatch creates no draft and attempts no restore. A confirmed fallback
+draft remains a native selection, carries no bounds or surrounding context, and
+saves through the existing clipboard-text API contract.
+
+This mode cannot guarantee restoration or invisibility. macOS exposes neither
+pasteboard-writer identity nor an atomic compare-and-restore operation, so a
+sufficiently narrow external-writer race can still be overwritten and a source
+app that processes Copy after Recall's bounded wait can still replace the prior
+clipboard. A crash, lazy representation that cannot be materialized, or write
+failure can also prevent full restoration. Clipboard history applications,
+Universal Clipboard, or other observers may record either temporary Copy.
+Settings and fallback review UI disclose this best-effort boundary; it must not
+be described as lossless, guaranteed, or private from clipboard observers.
+Application-scoped fallback also cannot prove per-control safety when a
+custom-drawn app omits those attributes; it remains opt-in and equivalent to the
+user explicitly asking Recall to perform Copy in that verified frontmost app.
 
 ## Pending decisions
 
