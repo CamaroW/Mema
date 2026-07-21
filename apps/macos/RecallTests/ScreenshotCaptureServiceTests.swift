@@ -74,6 +74,52 @@ final class ScreenshotCaptureServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
     }
 
+    func testTemporarySignatureExplainsWhyAnEnabledPermissionCannotBeMatched() async {
+        let runner = ScreenshotProcessRunnerStub(
+            imageData: Data([1]),
+            terminationStatus: 0
+        )
+        let service = SystemScreenshotCaptureService(
+            permissionService: DeniedScreenCapturePermissionStub(),
+            codeSigningIdentityService: CodeSigningIdentityStub(isStable: false),
+            processRunner: runner
+        )
+
+        do {
+            _ = try await service.captureInteractive()
+            XCTFail("Expected an unstable-signature error")
+        } catch {
+            XCTAssertEqual(error as? ScreenshotCaptureError, .unstableCodeSignature)
+            XCTAssertTrue(error.localizedDescription.contains("temporary code signature"))
+            XCTAssertTrue(error.localizedDescription.contains("Apple Development"))
+        }
+        let outputURL = await runner.lastOutputURL()
+        XCTAssertNil(outputURL)
+    }
+
+    func testStableSignatureKeepsTheNormalPermissionGuidanceWhenAccessIsDenied() async {
+        let runner = ScreenshotProcessRunnerStub(
+            imageData: Data([1]),
+            terminationStatus: 0
+        )
+        let service = SystemScreenshotCaptureService(
+            permissionService: DeniedScreenCapturePermissionStub(),
+            codeSigningIdentityService: CodeSigningIdentityStub(isStable: true),
+            processRunner: runner
+        )
+
+        do {
+            _ = try await service.captureInteractive()
+            XCTFail("Expected a permission-denied error")
+        } catch {
+            XCTAssertEqual(error as? ScreenshotCaptureError, .permissionDenied)
+            XCTAssertTrue(error.localizedDescription.contains("System Settings"))
+            XCTAssertFalse(error.localizedDescription.contains("temporary code signature"))
+        }
+        let outputURL = await runner.lastOutputURL()
+        XCTAssertNil(outputURL)
+    }
+
     func testSuspendedSelectionDoesNotBlockMainActor() async throws {
         let runner = SuspendedScreenshotProcessRunner()
         let service = SystemScreenshotCaptureService(
@@ -104,6 +150,17 @@ final class ScreenshotCaptureServiceTests: XCTestCase {
 private struct AllowedScreenCapturePermissionStub: ScreenCapturePermissionServing {
     func isAuthorized() -> Bool { true }
     func requestAccess() -> Bool { true }
+}
+
+private struct DeniedScreenCapturePermissionStub: ScreenCapturePermissionServing {
+    func isAuthorized() -> Bool { false }
+    func requestAccess() -> Bool { false }
+}
+
+private struct CodeSigningIdentityStub: CodeSigningIdentityServing {
+    let isStable: Bool
+
+    var hasStablePrivacyIdentity: Bool { isStable }
 }
 
 private actor ScreenshotProcessRunnerStub: InteractiveScreenshotProcessRunning {

@@ -87,6 +87,54 @@ retrieval, or image-persistence behavior. Screenshot bytes remain limited to the
 active draft, and the GPT/cloud versus Apple Vision/on-device disclosure remains
 unchanged.
 
+## macOS privacy identity boundary
+
+Carbon hotkey registration itself needs neither Accessibility nor Input
+Monitoring permission, but launching the interactive screenshot selector is a
+separate Screen Recording-protected operation. macOS associates that approval
+with the app's designated code requirement rather than only the `Recall` name or
+`com.recall.macos` bundle identifier.
+
+Decision D-032 therefore separates portable buildability from interactive TCC
+acceptance:
+
+```text
+tracked Signing.xcconfig ─ ad-hoc fallback ─ deterministic build/test only
+            │
+            └─ ignored Signing.local.xcconfig ─ Apple Development identity
+                                                    │
+                                                    └─ stable signer-based
+                                                       designated requirement
+                                                               │
+                                                               └─ Screen Recording
+                                                                  authorization
+```
+
+The tracked project never contains a developer's Team ID. A developer who needs
+real screenshot permission copies the checked-in local example, supplies the
+actual Team ID for an installed Apple Development identity, and builds normally.
+The signing verifier rejects a missing Team ID or a CDHash-only designated
+requirement before interactive testing. The runtime permission service likewise
+reports a temporary-signature explanation when Screen Recording preflight and
+request both fail for an app without a stable privacy identity.
+
+An ad-hoc fallback remains intentional for CI and deterministic local tests. A
+new ad-hoc build has a new CDHash-specific requirement; therefore an enabled
+same-name row left by an older build is not permission evidence for the current
+process. `CODE_SIGNING_ALLOWED=NO` can prove compilation and unit behavior but
+cannot close the Screen Recording gate. Migrating once requires quitting every
+Recall copy, resetting only `ScreenCapture` for `com.recall.macos`, authorizing
+the verified stable build, and relaunching it. No Screen Recording entitlement
+is added, and this identity correction changes no screenshot-data boundary.
+
+The integration Mac verifies this boundary end to end: after app-specific reset
+and authorization, a same-signer version-2 rebuild changed executable CDHash
+from `143035…` to `5a1b00…` without changing its Team ID or signer-based
+requirement. That rebuilt process launched the system selector, displayed its
+overlay, and cancelled without a permission error. Physical global-key delivery
+and completing a non-empty region remain a separate interaction gate, not a TCC
+identity uncertainty.
+
 ## Browser inline capture boundary
 
 Decision D-029, merged through PR #8 in `71ec387`, adds an opt-in selected-text

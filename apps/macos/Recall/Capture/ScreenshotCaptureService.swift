@@ -1,6 +1,7 @@
 @preconcurrency import AppKit
 import CoreGraphics
 import Foundation
+import Security
 
 struct ScreenshotSnapshot: Equatable, Sendable {
     let imageData: Data
@@ -11,6 +12,7 @@ struct ScreenshotSnapshot: Equatable, Sendable {
 enum ScreenshotCaptureError: Error, LocalizedError, Equatable {
     case cancelled
     case permissionDenied
+    case unstableCodeSignature
     case unavailable
     case emptyImage
 
@@ -22,6 +24,11 @@ enum ScreenshotCaptureError: Error, LocalizedError, Equatable {
             return "Recall needs Screen Recording permission. Open System Settings > "
                 + "Privacy & Security > Screen & System Audio Recording, enable Recall, "
                 + "then relaunch the app."
+        case .unstableCodeSignature:
+            return "This Recall build uses a temporary code signature, so macOS cannot "
+                + "match it to the Screen Recording permission shown in System Settings. "
+                + "Use an Apple Development-signed build, reset Recall’s Screen Recording "
+                + "permission once, then relaunch the app."
         case .unavailable:
             return "Recall could not start macOS screenshot selection."
         case .emptyImage:
@@ -42,6 +49,36 @@ struct SystemScreenCapturePermissionService: ScreenCapturePermissionServing {
 
     func requestAccess() -> Bool {
         CGRequestScreenCaptureAccess()
+    }
+}
+
+protocol CodeSigningIdentityServing {
+    var hasStablePrivacyIdentity: Bool { get }
+}
+
+struct SystemCodeSigningIdentityService: CodeSigningIdentityServing {
+    var hasStablePrivacyIdentity: Bool {
+        var dynamicCode: SecCode?
+        guard SecCodeCopySelf(SecCSFlags(), &dynamicCode) == errSecSuccess,
+              let dynamicCode else {
+            return false
+        }
+
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(dynamicCode, SecCSFlags(), &staticCode) == errSecSuccess,
+              let staticCode else {
+            return false
+        }
+
+        var information: CFDictionary?
+        let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
+        guard SecCodeCopySigningInformation(staticCode, flags, &information) == errSecSuccess,
+              let dictionary = information as? [String: Any],
+              let teamIdentifier = dictionary[kSecCodeInfoTeamIdentifier as String] as? String
+        else {
+            return false
+        }
+        return teamIdentifier.nonEmptyTrimmed != nil
     }
 }
 
@@ -66,6 +103,7 @@ struct SystemScreenshotCaptureService: ScreenshotCaptureServing {
     static let temporaryFilenamePrefix = "recall-screenshot-"
 
     private let permissionService: any ScreenCapturePermissionServing
+    private let codeSigningIdentityService: any CodeSigningIdentityServing
     private let processRunner: any InteractiveScreenshotProcessRunning
     private let fileManager: FileManager
     private let temporaryDirectory: URL
@@ -73,12 +111,15 @@ struct SystemScreenshotCaptureService: ScreenshotCaptureServing {
     init(
         permissionService: any ScreenCapturePermissionServing =
             SystemScreenCapturePermissionService(),
+        codeSigningIdentityService: any CodeSigningIdentityServing =
+            SystemCodeSigningIdentityService(),
         processRunner: any InteractiveScreenshotProcessRunning =
             SystemInteractiveScreenshotProcessRunner(),
         fileManager: FileManager = .default,
         temporaryDirectory: URL? = nil
     ) {
         self.permissionService = permissionService
+        self.codeSigningIdentityService = codeSigningIdentityService
         self.processRunner = processRunner
         self.fileManager = fileManager
         self.temporaryDirectory = temporaryDirectory ?? fileManager.temporaryDirectory
@@ -88,6 +129,9 @@ struct SystemScreenshotCaptureService: ScreenshotCaptureServing {
     func captureInteractive() async throws -> ScreenshotSnapshot {
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
         guard permissionService.isAuthorized() || permissionService.requestAccess() else {
+            guard codeSigningIdentityService.hasStablePrivacyIdentity else {
+                throw ScreenshotCaptureError.unstableCodeSignature
+            }
             throw ScreenshotCaptureError.permissionDenied
         }
 

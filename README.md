@@ -96,6 +96,15 @@ matrix are in [`apps/macos/README.md`](apps/macos/README.md). Run the complete
 macOS test bundle reliably from the repository root with
 `./scripts/test-macos.sh`.
 
+Interactive screenshot-permission testing requires a stable Apple Development
+signature. Copy `apps/macos/Config/Signing.local.xcconfig.example` to the
+gitignored `Signing.local.xcconfig`, enter the certificate's actual Team ID,
+build normally, and verify the resulting app with
+`./scripts/verify-macos-signing.sh`. Do not commit a personal Team ID.
+`CODE_SIGNING_ALLOWED=NO` is reserved for deterministic automation and cannot
+prove Screen Recording authorization. The macOS README documents the one-time
+reset and reauthorization needed when migrating from an earlier ad-hoc build.
+
 Recall remains a normal Dock app and also keeps its existing menu-bar extra.
 While the app is running, global screenshot and clipboard capture default to
 `Option+Shift+Command+4` and `Option+Shift+Command+C`; they remain available
@@ -142,7 +151,9 @@ fails unless every layer passes. The workflow has read-only repository access,
 does not receive `.env` or an OpenAI key, and never performs a real provider
 call. Real GPT, Screen Recording permission, and interactive screenshot flows
 remain explicit manual release gates. The physical global hotkeys and the
-global screenshot path also require a final run from the normally signed app.
+global screenshot path also require a final run from the stably signed app.
+CI may intentionally disable code signing for deterministic tests, so a green
+macOS job is not TCC acceptance evidence.
 
 ## Current status
 
@@ -180,12 +191,23 @@ bar, its status icon, and Settings, and existing drafts are never silently
 replaced. Screenshot process waiting and PNG reads are asynchronous; selection
 cancellation and temporary-file cleanup are covered, and app termination
 requests cancellation of pending work. Twenty new tests bring the host-verified
-macOS suite to 68/68. Settings
-persistence, restore-defaults, active Carbon registration, clipboard Quick
-Capture, repeated-trigger draft preservation, and the bounded long-context view
-were exercised in the real app. The temporary unsigned build correctly exposed
-the missing Screen Recording permission without changing it, so actual physical
-hotkeys and real region selection remain a signed-build manual gate.
+macOS suite to 68/68. Settings persistence, restore-defaults, active Carbon
+registration, clipboard Quick Capture, repeated-trigger draft preservation,
+and the bounded long-context view were exercised in the real app. PR #10 merged
+D-031 into `main` at `0ab687b`.
+
+D-032 records the subsequent Screen Recording diagnosis. The affected Debug
+app used an ad-hoc signature with no Team ID and a CDHash-only designated
+requirement. Rebuilding therefore produced a new privacy identity even though
+System Settings retained an enabled same-name Recall entry from the preceding
+build. Portable project signing configuration, an ignored per-developer Team ID
+override, a signing verifier, and a specific temporary-signature diagnostic now
+make that state explicit. The app-specific TCC reset and reauthorization now
+pass on the integration Mac. A same-signer rebuild changed CDHash from
+`143035…` to `5a1b00…` while retaining the Team ID and signer-based requirement;
+the rebuilt app opened the system region overlay and cancelled cleanly without
+a permission error. The macOS suite passes 70/70. B-014 now contains only the
+remaining physical-hotkey and completed non-empty-region acceptance.
 Final regression also passes 215 backend tests, 44/44 stress scenarios, and
 68/68 Chrome-extension tests.
 

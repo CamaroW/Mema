@@ -6,25 +6,26 @@ Project: Recall
 
 Last updated: 2026-07-21
 
-Current phase: D-031 native global capture; signed-build manual gate pending
+Current phase: B-014 physical global-capture acceptance
 
-Implementation branch: `codex/native-global-capture`
+Implementation branch: `codex/stable-screen-recording-permission`
 
-Branch base: `0c1083e` (PR #9 merge commit)
+Branch base: `0ab687b` (PR #10 merge commit)
 
 Canonical target: `main`
 
 The canonical `main` tree combines the hardened backend, Chrome extension,
 macOS client, screenshot OCR, shared contracts, and layered CI. It includes
-D-029 merged through PR #8 at `71ec387` and D-030 merged through PR #9 at
-`0c1083e`.
+D-029 merged through PR #8 at `71ec387`, D-030 merged through PR #9 at
+`0c1083e`, and D-031 merged through PR #10 at `0ab687b`.
 
-The D-031 working tree adds 20 macOS shortcut, coordinator, draft-safety, and
-asynchronous screenshot tests. Final regression passes 215 backend tests, 44/44
-stress scenarios, 68/68 Chrome-extension tests, and 68/68 macOS tests on the
-host. Bounded real-app evidence is recorded below. Actual physical global key
-delivery and real screenshot-region selection remain the normally signed-build
-manual gate.
+The D-031 checkpoint adds 20 macOS shortcut, coordinator, draft-safety, and
+asynchronous screenshot tests. Its final regression passes 215 backend tests,
+44/44 stress scenarios, 68/68 Chrome-extension tests, and 68/68 macOS tests on
+the host. D-032 corrects the ad-hoc signing identity failure, passes 70/70 macOS
+tests, and is live-verified across app-specific TCC reset, authorization,
+same-signer rebuild, selector launch, and cancellation. B-014 now retains only
+physical global-key delivery and one completed non-empty screenshot region.
 
 Last baseline cross-check: 2026-07-18 against all sections of
 `docs/product-plan.md`
@@ -73,7 +74,8 @@ Update protocol:
 | Addition | Screenshot-to-notes OCR | Complete and verified | PR #5 supersedes draft PR #4; 214 backend, 44/44 stress, 16 extension, and 43 macOS tests pass; live GPT, Apple Vision, permission, cancellation, and dismissal flows pass |
 | Addition | Opt-in inline browser capture | Complete, real-Chrome verified, and merged | PR #8 merged D-029 at `71ec387`; 68/68 extension tests and enable/save/retry/revoke/BFCache/toolbar-fallback evidence passed before merge |
 | Addition | Browser context and detail-view hardening | Complete, UI-reviewed, and merged | D-030 disables unsafe Chrome context, bounds native display, fixes inline count/scroll, and compacts the popup; PR #9 merged at `0c1083e` after all required checks passed |
-| Addition | Native global capture | Implemented and bounded UI-verified / signed-build manual gate pending | D-031 adds transactional Carbon shortcuts and one app-level capture coordinator; 20 new tests bring the host macOS suite to 68/68; see B-014 |
+| Addition | Native global capture | Merged and bounded UI-verified / physical-input gate pending | D-031 adds transactional Carbon shortcuts and one app-level capture coordinator; PR #10 merged at `0ab687b`; see B-014 |
+| Safeguard | Stable Screen Recording identity | Complete and live-verified | D-032 passes 70/70 macOS tests; app-specific reset, authorization, rebuild persistence, selector launch, and cancellation pass |
 
 The D-023 integration closes B-010, the macOS slice closes B-006, and real
 provider plus unpacked-Chrome evidence closes B-007, B-008, and B-009. B-011 is
@@ -220,9 +222,9 @@ verification, source review, and CI complete; PR #9 merged into `main` at
 
 ## Active addition — native global capture
 
-Status: `[~]` D-031 implementation, automated verification, and bounded real-UI
-verification are complete on `codex/native-global-capture`; the normally signed
-build manual gate in B-014 remains open
+Status: `[~]` D-031 implementation, automated verification, bounded real-UI
+verification, review, and merge are complete at `0ab687b`; the physical-input
+gate in B-014 remains open
 
 - [x] Keep Recall as a normal Dock application with the existing
   `MenuBarExtra`. Global capture requires the app to be running but is owned by
@@ -265,16 +267,54 @@ build manual gate in B-014 remains open
   trigger preserved the existing draft and displayed its explanatory notice.
 - [x] Reopen the problematic 19,144-character context record and confirm it
   remains collapsed and responsive under D-030.
-- [x] Exercise the unsigned build's explicit Screen Recording permission error.
-  It did not have permission, and verification deliberately did not change the
-  permission state.
-- [ ] In a normally signed build, focus another app, close Recall's main window
-  without quitting, and verify both physical global key combinations deliver to
-  Recall. Automation cannot synthesize this global-key evidence.
-- [ ] In that normally signed build, grant or confirm Screen Recording
-  permission, invoke the screenshot hotkey, and complete and cancel real region
-  selections. Confirm the completed selection opens the existing disclosure UI
-  and cancellation leaves no draft or temporary PNG.
+- [x] Exercise the temporary ad-hoc build's explicit Screen Recording permission
+  error. It did not match the permission record, and verification deliberately
+  did not change the permission state.
+- [x] Reset and authorize the stably signed build, relaunch after a same-signer
+  rebuild, show the real system selector, and cancel it without a permission
+  error or draft.
+- [ ] Focus another app, close Recall's main window without quitting, physically
+  press `Option+Shift+Command+4`, and complete one non-empty region. Automation
+  cannot synthesize this global-key evidence. Reconfirm
+  `Option+Shift+Command+C` if practical.
+
+## Active reliability correction — stable Screen Recording identity
+
+Status: `[x]` D-032 implementation, 70/70 tests, and live TCC rebuild
+persistence verification are complete on
+`codex/stable-screen-recording-permission`
+
+- [x] Reproduce the mismatch in the running Debug app: System Settings showed
+  Recall enabled, while `CGPreflightScreenCaptureAccess()` still failed.
+- [x] Inspect the actual process rather than another app copy. Its signature was
+  ad-hoc, `TeamIdentifier` was absent, and its designated requirement was tied
+  to one CDHash, so a rebuild produced a new TCC identity.
+- [x] Add portable `Config/Signing.xcconfig` configuration for the app and test
+  targets. Keep ad-hoc fallback available for clones and deterministic
+  automation, and load an optional ignored `Signing.local.xcconfig` for real
+  Apple Development signing.
+- [x] Check in only a placeholder example. Each developer must enter the actual
+  Team ID from their certificate/account locally; no machine Team ID or
+  certificate nickname is committed.
+- [x] Add `scripts/verify-macos-signing.sh` to reject an invalid signature,
+  absent Team ID, or CDHash-only designated requirement before interactive
+  privacy testing.
+- [x] When Screen Recording preflight and request both fail, distinguish a
+  temporary code signature from an ordinary user denial and present the
+  stable-signing/reset guidance. Add no Screen Recording entitlement.
+- [x] Produce a local Apple Development-signed Debug app with a non-empty Team
+  ID and signer-based designated requirement. Confirm the verifier rejects the
+  preceding ad-hoc build.
+- [x] Run the complete D-032 macOS suite at 70/70.
+- [x] Quit every Recall copy, run the app-specific
+  `tccutil reset ScreenCapture com.recall.macos`, request permission from the
+  stable build, switch Recall from off to on, and choose **Quit & Reopen**.
+- [x] Rebuild with the same identity and `CURRENT_PROJECT_VERSION=2`. CDHash
+  changes from `143035…` to `5a1b00…` while Team ID and the signer-based
+  designated requirement remain stable.
+- [x] Launch the rebuilt process as PID 87557, confirm it starts child
+  `/usr/sbin/screencapture` and displays the system region overlay, then cancel
+  with Escape and return to Recall without a permission error.
 
 ## Scope, schedule, and collaboration guardrails
 
@@ -1452,28 +1492,33 @@ Use IDs `B-###`. Never delete an entry; append resolution and date.
 - Does it block build, automated verification, commit, or push? No. The manual
   permission and selection gate is now closed.
 
-## B-014 — Normally signed-build global capture acceptance
+## B-014 — Physical global capture acceptance
 
 - Opened: 2026-07-21
 - Severity: Manual UI/demo evidence / non-blocking for implementation
 - Status: Open
 - Impact: Carbon registration, Settings persistence, rollback behavior,
   coordinator routing, exact clipboard Quick Capture, repeated-trigger draft
-  preservation, and asynchronous screenshot cancellation are covered by 68/68
+  preservation, and asynchronous screenshot cancellation are covered by 70/70
   host tests and bounded UI checks. Automation cannot synthesize a trustworthy
-  system-wide physical hotkey, however, and the temporary unsigned test build
-  did not have Screen Recording permission.
+  system-wide physical hotkey or complete a meaningful non-empty user region.
 - Evidence already complete: Settings showed both defaults, persisted a
   screenshot change to `Option+Shift+Command+5` across restart, restored
   defaults, and reported active Carbon registration. Clipboard Quick Capture
   contained the exact 32 characters and preserved its draft on a repeated
-  trigger. The unsigned build exposed the explicit permission error without
-  changing the permission, and the 19,144-character context record remained
-  collapsed and responsive.
-- Resolution needed: In the normally signed build, close only the main window,
-  focus another app, and press both physical global shortcuts. Then grant or
-  confirm Screen Recording permission and complete plus cancel actual screenshot
-  overlays. Verify the existing disclosure UI, draft preservation, and cleanup.
+  trigger. Code-signing inspection of the actual running process found
+  `Signature=adhoc`, no Team ID, and a CDHash-only designated requirement. A
+  stable Apple Development-signed build now passes the repository verifier.
+  App-specific reset and authorization succeeded; a same-signer version-2
+  rebuild changed CDHash from `143035…` to `5a1b00…` without changing Team ID or
+  the signer-based requirement. Rebuilt PID 87557 launched
+  `/usr/sbin/screencapture`, displayed the overlay, and returned without a
+  permission error after Escape. The 19,144-character context record also
+  remained collapsed and responsive.
+- Resolution needed: On the current branch, close Recall's main window without
+  quitting, focus another app, physically press `Option+Shift+Command+4`, and
+  drag one non-empty region through the existing disclosure UI. Reconfirm the
+  clipboard hotkey if practical.
 - Does it block build, deterministic regression, or documentation? No. It blocks
   claiming complete real-device global capture acceptance and should be closed
   before using the hotkeys as live demo proof.
@@ -1482,6 +1527,33 @@ Use IDs `B-###`. Never delete an entry; append resolution and date.
 
 Use IDs `E-###`. Record the original symptom and the resolution. Do not erase
 resolved errors.
+
+## E-058 — Enabled Screen Recording row did not authorize the rebuilt app
+
+- Date: 2026-07-21
+- Status: Resolved and live-verified 2026-07-21
+- Symptom: Pressing `Option+Shift+Command+4` showed Recall's Screen Recording
+  requirement even though **System Settings > Privacy & Security > Screen &
+  System Audio Recording** already displayed Recall as enabled. Restarting the
+  app did not resolve it.
+- Cause: Inspection targeted the actual running app. It was ad-hoc signed with
+  no Team ID, and its designated requirement named only one CDHash. A rebuild
+  changed that requirement, so TCC's retained row described an older same-name
+  Recall identity while the current `CGPreflightScreenCaptureAccess()` result
+  correctly remained false.
+- Resolution: D-032 adds portable Xcode signing configuration, an optional
+  gitignored local Apple Development Team ID override, a verifier that rejects
+  missing Team IDs and CDHash-only requirements, and a runtime explanation when
+  a temporary signature cannot match the visible permission. A stable local
+  build now retains its signer-based requirement across a changed executable
+  CDHash, while the verifier rejects the old ad-hoc app. App-specific reset,
+  authorization, **Quit & Reopen**, a same-signer version-2 rebuild, selector
+  launch, and Escape cancellation all pass without the permission error. The
+  complete macOS suite passes 70/70. B-014 now tracks only the separate physical
+  hotkey and completed non-empty-region interaction.
+- Project impact: No API, storage, Chrome, OCR, image-persistence, or entitlement
+  change. `CODE_SIGNING_ALLOWED=NO` remains valid for deterministic automation
+  but is explicitly excluded from Screen Recording acceptance.
 
 ## E-055 — Job-level environment referenced the runner context too early
 

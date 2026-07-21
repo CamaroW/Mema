@@ -44,7 +44,8 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-028 | Layered GitHub Actions pull-request checks | Reliability safeguard | Accepted by user direction |
 | D-029 | Opt-in inline browser selected-text capture | Addition | Implemented, real-Chrome verified, and merged in PR #8 |
 | D-030 | Omit unsafe browser context and bound native display | Reliability/privacy safeguard | Implemented, UI-verified, and merged through PR #9 at `0c1083e` |
-| D-031 | Native global capture through Carbon and one app-level coordinator | Addition | Implemented; 68/68 macOS tests pass; signed-build manual gate pending |
+| D-031 | Native global capture through Carbon and one app-level coordinator | Addition | Implemented and merged through PR #10 at `0ab687b`; final physical-input gate pending |
+| D-032 | Stable development code identity for TCC-protected screenshot capture | Reliability/privacy safeguard | Implemented; 70/70 tests and live TCC rebuild-persistence proof pass |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -759,9 +760,8 @@ aggregate Required checks job before merging into `main` at `0c1083e`.
 ## D-031 — Native global capture through Carbon and one app-level coordinator
 
 - Classification: Addition approved by user direction
-- Status: Implemented; automated and bounded real-UI verification are complete,
-  while the normally signed-build physical hotkey and real screenshot-region
-  manual gate remains open
+- Status: Implemented and merged; stable TCC behavior is verified under D-032,
+  while physical hotkey delivery and one completed non-empty region remain open
 - Product impact: Makes screenshot and clipboard Quick Capture available while
   Recall is running even if its main window is closed
 - Schedule impact: Current native priority; Accessibility selection remains next
@@ -817,11 +817,75 @@ Capture opened with the exact 32 characters; a repeated trigger kept that draft
 and showed the explanatory notice. The previously problematic
 19,144-character context record still opened collapsed and remained responsive.
 
-The temporary unsigned test build did not have Screen Recording permission. It
-showed the explicit permission error and the verification deliberately did not
-change that permission. Therefore actual physical global key delivery from
-another app and a real screenshot-region selection are not claimed as verified;
-both remain an explicit user acceptance gate in the normally signed build.
+The temporary ad-hoc test build did not match the Screen Recording permission
+record. It showed the explicit permission error and the verification
+deliberately did not change that permission. D-032 later verified the stable TCC
+identity, authorization, same-signer rebuild persistence, and selector
+cancellation. Physical global-key delivery and completing a non-empty region
+remain the narrower B-014 interaction gate.
+
+## D-032 — Stable development code identity for TCC-protected screenshot capture
+
+- Classification: Reliability and privacy safeguard approved by user direction
+- Status: Implemented and live-verified; the independent B-014 physical-input
+  gate remains open
+- Product impact: Makes Screen Recording authorization reliably refer to the
+  current development build and explains temporary-signature failures
+- Schedule impact: Bounded correction to the D-031 manual acceptance gate
+
+macOS privacy authorization matches an application's designated code
+requirement, not only its display name or `com.recall.macos` bundle identifier.
+The affected Debug app was ad-hoc signed with no Team ID and a designated
+requirement tied only to that build's CDHash. Rebuilding changed the CDHash and
+therefore its privacy identity. System Settings could retain an enabled Recall
+row for the preceding build while `CGPreflightScreenCaptureAccess()` returned
+false for the currently running process.
+
+The Xcode project now uses a tracked, portable `Config/Signing.xcconfig` for
+both app and test targets. It has an ad-hoc fallback so cloning and deterministic
+automation remain available without a developer account, and it optionally
+includes a gitignored `Signing.local.xcconfig`. Each developer who performs
+interactive privacy testing copies the checked-in example and supplies the
+actual Team ID for their own Apple Development identity. No personal Team ID,
+certificate label, or machine-specific path belongs in version control.
+
+A local signing verifier rejects an invalid app signature, a missing
+`TeamIdentifier`, or a CDHash-only designated requirement. The runtime
+permission path also distinguishes a temporary code identity from an ordinary
+denial when both Screen Recording preflight and request fail. This gives the
+developer a direct stable-signing and one-time-reset instruction instead of
+implying that an enabled stale System Settings row authorizes the current
+process. No Screen Recording entitlement is added.
+
+Live verification quit every Recall process, reset only `ScreenCapture` for
+`com.recall.macos`, requested permission from the stable build, changed Recall's
+System Settings switch from off to on, and used **Quit & Reopen**. After
+authorization, a same-signer build with `CURRENT_PROJECT_VERSION=2` changed the
+executable CDHash from `143035…` to `5a1b00…` while retaining its Team ID and
+signer-based designated requirement. The rebuilt process launched
+`/usr/sbin/screencapture`, displayed the region overlay, and returned to Recall
+without a permission error after Escape. The verifier also rejects the old
+ad-hoc build, and the complete macOS suite passes 70/70.
+
+`CODE_SIGNING_ALLOWED=NO` remains appropriate for the deterministic macOS test
+runner and CI, but such a build cannot prove TCC authorization. Interactive
+acceptance must use the stably signed app. Migration from an existing ad-hoc
+entry is deliberately explicit: quit every Recall process, verify the intended
+app bundle, run `tccutil reset ScreenCapture com.recall.macos`, launch that exact
+build, authorize it once, quit, relaunch, and then exercise completed plus
+cancelled region selections. Rebuild persistence is accepted only when the new
+executable CDHash changes while its signer-based designated requirement and
+authorization remain effective. D-032 now satisfies that identity and
+cancelled-selector proof. B-014 separately retains physical hotkey delivery and
+one completed non-empty region.
+
+This follows Apple's explanation that privacy controls use code-signing
+requirements to identify an app and Apple's documented Screen & System Audio
+Recording authorization flow:
+
+- [TN3127: Inside Code Signing: Requirements](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements)
+- [Apple DTS: Screen Recording authorization across ad-hoc rebuilds](https://developer.apple.com/forums/thread/819406)
+- [Control access to screen and system audio recording on Mac](https://support.apple.com/guide/mac-help/control-access-screen-system-audio-recording-mchld6aa7d23/mac)
 
 ## Pending decisions
 

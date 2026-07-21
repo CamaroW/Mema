@@ -28,6 +28,7 @@ dist/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+apps/macos/Config/Signing.local.xcconfig
 .DS_Store
 
 # Editors
