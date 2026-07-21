@@ -55,6 +55,12 @@ split; they are no longer assignment gates.
   ordinary search reuse, image display, and whole-Capture deletion. The user
   verified real-app image notes with AI both disabled and enabled; automated
   backend/macOS verification and file-deletion coverage pass.
+- D-038 adds editable memories without collapsing provenance. User source
+  corrections and organization overrides remain distinct from captured and AI
+  columns; source/note edits mark the previous AI interpretation stale and hide
+  it until an explicit refresh. Creation/user-edit sorting, minute-level static
+  timestamps, state-driven notices, separated Settings tabs, and stable image-
+  note composer geometry are implemented on `codex/note-editing-ui-polish`.
 - The macOS app and Chrome extension are separate clients of the loopback
   FastAPI service. The app does not yet package or start that service.
 
@@ -145,13 +151,21 @@ not approval from a particular historical developer role.
    deletion are integrated. AI-disabled and AI-enabled image saves passed
    real-app acceptance. Keep visual-concept retrieval, restart, retry, and
    physical file deletion in release regression coverage.
-7. **App-managed local service lifecycle.** Define how a packaged Recall app
+7. **Editable memories and state-driven UI polish — automated-verified; real-app
+   acceptance pending.** D-038 adds migration 005,
+   `PATCH /v1/captures/{id}`, explicit user overrides, stale-AI handling,
+   creation/edit ordering, fixed minute-level timestamps,
+   bounded/state-resolved notices, two Settings tabs, and stable image-note
+   toggle layout. The gate passes 243 backend, 44/44 stress, 68/68 Chrome, and
+   189/189 host macOS checks. Complete real-app editing and layout acceptance
+   before merge.
+8. **App-managed local service lifecycle.** Define how a packaged Recall app
    starts, monitors, and stops the backend without assuming a repository checkout
    or terminal command. Keep this separate from browser native messaging.
-8. **Menu-bar image drop.** After image semantics are decided, add a bounded
+9. **Menu-bar image drop.** After image semantics are decided, add a bounded
    drop target. A click-open drop zone may precede a custom AppKit status item
    that opens when an image is dragged directly over the icon.
-9. **Release readiness.** Finish licensing, screenshots, demo materials,
+10. **Release readiness.** Finish licensing, screenshots, demo materials,
    packaging/notarization decisions, a stable tag, and clean-machine setup proof.
 
 ## Later product polish

@@ -51,6 +51,7 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-035 | Opt-in transactional clipboard fallback for native selection | Compatibility/privacy safeguard | Implemented; 149/149 host tests and user WeChat acceptance pass |
 | D-036 | Conservative structured-text line restoration | Capture-correctness addition | Merged in PR #14; live Gemini clipboard payload verified |
 | D-037 | Persisted image notes with opt-in background visual indexing | Addition | Implemented; automated verification and real-app AI-disabled/AI-enabled acceptance pass |
+| D-038 | Editable memories with explicit user overrides and state-driven UI | Addition | Implemented on `codex/note-editing-ui-polish`; 243 backend, 44/44 stress, 68/68 Chrome, and 189/189 macOS checks pass |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -1061,6 +1062,56 @@ background-task boundary rather than introducing a queue service.
 D-036 remains a separate capture-correctness decision and was merged through PR
 #14 before D-037 integration. The image-note model does not change its bounded
 structured-clipboard resolver.
+
+## D-038 — Editable memories with explicit user overrides and state-driven UI
+
+- Classification: Addition approved by user direction
+- Status: Implemented and automated-verified on
+  `codex/note-editing-ui-polish`; real-app interaction acceptance remains
+- Product impact: Users can correct and organize saved memories without making
+  user-authored changes indistinguishable from captured or AI-generated data
+- Schedule impact: Crosses migration, API, FTS, embedding invalidation, macOS
+  editing, sorting, notification lifecycle, Settings, and detail/list UI
+
+Migration 005 adds a user-edit layer rather than repurposing captured or AI
+columns. Corrected selected text and source metadata are stored as explicit
+overrides; the captured database values remain intact. A user title, problem,
+key insight, why-it-mattered value, caveats, and tags similarly take display and
+FTS precedence without replacing `ai_*`, `problem`, `tags_json`, or other model
+output. Empty user strings/arrays deliberately hide an inapplicable generated
+field, while `NULL` continues to mean “use the AI value.” The ordinary user note
+is user-owned and may be updated directly.
+
+`user_edited_at` records explicit edits only. Existing `updated_at` remains a
+broader system revision timestamp because AI state transitions also update it.
+Library ordering can use creation or user-edit time in either direction;
+unedited memories fall back to their creation time. Search results retain
+relevance order. Static minute-level list timestamps replace continuously
+updating relative seconds.
+
+Changing effective selected content, source metadata, or the user note marks
+the current AI interpretation stale and hides it. Recall does not silently call
+the provider after an edit: that would spend quota, transmit changed content,
+and replace context without a new explicit user action. The detail view instead
+offers **Refresh AI**, which uses the effective corrected source and current note,
+replaces only the AI layer, and preserves user organization overrides. Any edit
+invalidates the old embedding while trigger-synchronized FTS immediately indexes
+the effective user-visible values.
+
+Application notices now declare either a bounded lifetime or the state that
+resolves them. Clipboard warnings expire and clear on a later successful
+capture; connection errors clear after a successful health/list/search probe;
+processing notices become a short ready/error result when polling observes the
+terminal state. Settings separates shortcut registration from automatically
+saved privacy/features, and the screenshot image-note composer reserves fixed
+preview, description, and switch geometry so the AI toggle cannot resize or
+shift nearby content.
+
+The completed automated gate passes 243 backend tests, all 44 deterministic
+stress scenarios, all 68 Chrome-extension tests, and 189/189 host macOS tests,
+including production Apple Vision OCR. Editing, sort ordering, notice
+resolution, Settings tabs, and image-composer geometry remain the focused
+real-app acceptance pass before merge.
 
 ## D-036 — Conservative structured-text line restoration
 

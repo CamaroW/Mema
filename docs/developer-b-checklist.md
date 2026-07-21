@@ -6,14 +6,14 @@ Project: Recall
 
 Last updated: 2026-07-21
 
-Current phase: Structured-text fidelity and persisted image notes implemented;
-primary real-app acceptance complete and release regression work remains
+Current phase: Editable memories and state-driven UI polish implemented;
+automated verification complete and real-app verification pending
 
-Implementation branch: `codex/image-notes`
+Implementation branch: `codex/note-editing-ui-polish`
 
-Merged prerequisite branch: `codex/text-capture-fidelity`
+Merged prerequisite branches: `codex/text-capture-fidelity`, `codex/image-notes`
 
-Integration base: `667b045` (PR #14 merge commit)
+Integration base: `e18393c` (PR #15 merge commit)
 
 Canonical target: `main`
 
@@ -111,6 +111,7 @@ Update protocol:
 | Addition | Clipboard selection compatibility | Complete and real-device accepted | D-035 adds an off-by-default transactional synthetic-Copy fallback with exact-control and application-scoped tickets; 149/149 host tests and B-016 user acceptance pass |
 | Addition | Structured-text capture fidelity | Implemented; live payload verified | D-036 adds a bounded plain/HTML/RTF resolver to explicit Clipboard Capture; the real Gemini payload restores verified boundaries from flattened plain text while retaining TeX |
 | Addition | Persisted image notes and visual indexing | Implemented; primary real-app flow accepted | D-037 adds one bounded local image, separate note, off-by-default AI master switch, existing-search reuse, rendering, retry, and deletion; 235 backend and 184 integrated macOS tests pass |
+| Addition | Editable memories and UI state polish | Implemented; automated verification complete | D-038 adds a separate user-edit layer, migration 005, explicit AI refresh, creation/edit sorting, state-driven notices, Settings tabs, and stable image-note layout; 243 backend, 44/44 stress, 68/68 Chrome, and 189/189 macOS checks pass |
 
 The D-023 integration closes B-010, the macOS slice closes B-006, and real
 provider plus unpacked-Chrome evidence closes B-007, B-008, and B-009. B-011 is
@@ -118,7 +119,35 @@ resolved by the hardening work. Remaining work is the explicit Layer 8 backlog
 and Layer 10 submission/release material, not a missing shared P0 integration
 gate.
 
-## Active addition — persisted image notes and visual indexing
+## Active addition — editable memories and state-driven UI polish
+
+Status: `[~]` D-038 implementation and full automated verification complete;
+real-app interaction acceptance remains
+
+- [x] Add migration 005 with explicit user source/organization overrides and a
+  separate `user_edited_at` timestamp while preserving captured and AI columns.
+- [x] Add `PATCH /v1/captures/{id}`, effective FTS synchronization, embedding
+  invalidation, processing conflict protection, and four deterministic list
+  sort modes.
+- [x] Add native editing for selected content, user note, title, source,
+  visibility, memory details, caveats, and removable/addable tags.
+- [x] Mark prior AI stale and hidden after source/note changes; require explicit
+  **Refresh AI** and retain user organization overrides across regeneration.
+- [x] Replace relative-second list times with stable minute-level display and
+  expose created/user-edited timestamps in detail.
+- [x] Give notices bounded or state-driven lifetimes; clear connection,
+  clipboard, and processing notices when their resolving condition occurs.
+- [x] Split Settings into Shortcuts and Privacy & Features; make Apply copy
+  shortcut-specific and disclose automatic persistence on the second page.
+- [x] Reserve fixed image-preview, two-line explanation, and switch geometry in
+  the image-note composer.
+- [x] Run full backend, stress, Chrome, and host macOS suites. Evidence: 243/243
+  backend, 44/44 stress, 68/68 Chrome-extension, and 189/189 host macOS tests,
+  including production Apple Vision OCR.
+- [ ] Complete real-app edit, sort, notice-resolution, Settings-tab, and stable
+  image-composer layout acceptance before merge.
+
+## Completed addition — persisted image notes and visual indexing
 
 Status: `[x]` D-037 automated implementation and real-app AI-disabled/AI-enabled
 image-note acceptance verified

@@ -63,6 +63,11 @@ the local engineering URLs:
 > `rollback/pre-screenshot-ocr`. See the backend README before replacing or
 > moving a database.
 
+> **Migration 005 boundary:** editable memories add explicit user-override and
+> user-edit timestamp columns, then rebuild the FTS projection to prefer those
+> values. Preserve a pre-upgrade database backup before starting this version;
+> older backends intentionally reject the newer schema.
+
 ```bash
 ./scripts/dev.sh
 ```
@@ -273,9 +278,19 @@ OCR plus visual indexing into the existing search fields. Provider errors keep
 the original safe and support **Retry AI**. The user verified real-app image
 notes with AI both disabled and enabled.
 
-The integrated D-036/D-037 tree passes 235 backend tests, 44/44 stress
-scenarios, 184/184 macOS tests, and
-68/68 Chrome-extension tests.
+D-038 adds editable memories while retaining provenance. Captured source and AI
+columns remain intact; user corrections, title/details/tags, and AI visibility
+live in an explicit user layer. Source or note edits mark the prior AI
+interpretation stale and hide it until **Refresh AI** is requested. The library
+can sort by creation or user-edit time in either direction, uses stable minute-
+level timestamps, and gives connection, clipboard, save, and processing notices
+state-aware lifetimes. Settings is split into Shortcuts and Privacy & Features,
+and the image-note review layout no longer shifts when AI indexing is toggled.
+
+The integrated D-038 tree passes 243 backend tests, 44/44 stress scenarios,
+189/189 macOS tests, and 68/68 Chrome-extension tests. Real-app acceptance for
+the new edit, sort, notice, Settings, and image-composer interactions remains
+the final pre-merge check.
 
 Live verification covers provider-off keyword fallback, real OpenAI enrichment
 and embeddings, semantic retrieval with a non-null score, and both selected-text
