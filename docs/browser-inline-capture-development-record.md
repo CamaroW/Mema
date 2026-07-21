@@ -123,3 +123,16 @@ fully demo-verified or merged under D-028, run this real-browser matrix:
 Phase 3 browser-region screenshot capture has not started. It remains a
 separate, independently gated improvement and must not destabilize this
 selected-text path.
+
+## Publication record
+
+Phase 1 is commit `d0fa028`; the Phase 2 runtime and this development record are
+commit `773e457`. Both are published together on
+`origin/agent/browser-inline-capture`.
+
+The first push process returned without output and did not establish a local
+tracking ref, while an immediate remote query returned no branch. After
+reapplying the authenticated GitHub credential helper, the retry reported the
+branch up to date and established tracking. A final remote query confirmed the
+exact Phase 2 commit at the branch head. This publication anomaly is retained
+as E-057 rather than silently treated as an initial success.

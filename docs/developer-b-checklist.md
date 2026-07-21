@@ -1421,6 +1421,20 @@ resolved errors.
 - Project impact: Verification command path only; no product behavior or file
   content was affected.
 
+## E-057 — First Phase 1–2 push did not establish verifiable tracking
+
+- Date: 2026-07-20
+- Status: Resolved 2026-07-20
+- Symptom: The first `git push -u` process returned no output, local status had
+  no upstream, and an immediate `git ls-remote` query returned no matching
+  branch. The attempt was not reported as successful.
+- Resolution: Ran `gh auth setup-git` after confirming the refreshed keychain
+  login, retried with `--set-upstream`, and verified local HEAD, the remote
+  tracking ref, and `refs/heads/agent/browser-inline-capture` all resolved to
+  the same Phase 2 commit.
+- Project impact: Publication workflow only; the committed code and test
+  results were unchanged.
+
 ## E-038 — First real provider call returned HTTP 429
 
 - Date: 2026-07-19
