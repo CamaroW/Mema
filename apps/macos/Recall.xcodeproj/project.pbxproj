@@ -14,12 +14,14 @@
 		270B9870A81D0A369487F31D /* ShortcutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA4714F128503F1DA951FAD4 /* ShortcutSettingsView.swift */; };
 		2757F0EE168B0E5F000AAA9A /* RecallRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11CC75EA9C49ECFDCE9BA01 /* RecallRootView.swift */; };
 		285A35BC27E078EEE6C87EDC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA34819F6E69740427617B25 /* Assets.xcassets */; };
+		2988F7490429FF163EE093D0 /* SelectionClipboardFallbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F99204CB67ACB2CF20FE08B /* SelectionClipboardFallbackService.swift */; };
 		2D00AD70CECEDB988150D65E /* APIResponses.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAEF2743986129858D7A1FFA /* APIResponses.swift */; };
 		400EC92694095F860A54A97C /* GlobalCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEFB135AD0B8A8FB9952B7C /* GlobalCaptureCoordinator.swift */; };
 		4D055E8631D36BB8D63E810E /* GlobalShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAEE10DE023B7AE4168CE6D0 /* GlobalShortcutTests.swift */; };
 		5686B9BE1BC60FD1716A5D7E /* QuickCaptureWindowPositioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2D5CA119FCA9D7BBC29A5A /* QuickCaptureWindowPositioner.swift */; };
 		6220042C8C2DCE392D5FBCC1 /* RecallComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6E5844BF3FF8AEAF4C199D /* RecallComponents.swift */; };
 		7136B53E312C12667962369E /* CaptureRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCC2ABDC4651148E69F99D99 /* CaptureRowView.swift */; };
+		74A8840A29B59DB720580574 /* SelectionClipboardFallbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A46C02B818E77E3EDD454F63 /* SelectionClipboardFallbackServiceTests.swift */; };
 		74AC33EE0315136F83F4892F /* GlobalShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B15622577D5C1BB5EB0E450 /* GlobalShortcut.swift */; };
 		76AC270354C21BA5411B759A /* ScreenshotCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18EA95D7013148198B81BC8D /* ScreenshotCaptureServiceTests.swift */; };
 		875C528DF07F73F9B52EC956 /* ScreenshotTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD0725565560AE1D29C8887 /* ScreenshotTextExtractor.swift */; };
@@ -59,6 +61,7 @@
 		18EA95D7013148198B81BC8D /* ScreenshotCaptureServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotCaptureServiceTests.swift; sourceTree = "<group>"; };
 		19835D10F285353D77EDF2E3 /* AppleVisionScreenshotTextExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleVisionScreenshotTextExtractorTests.swift; sourceTree = "<group>"; };
 		1F0FFD14F1B05A897E900C33 /* CaptureDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDetailView.swift; sourceTree = "<group>"; };
+		3F99204CB67ACB2CF20FE08B /* SelectionClipboardFallbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionClipboardFallbackService.swift; sourceTree = "<group>"; };
 		4A6E5844BF3FF8AEAF4C199D /* RecallComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecallComponents.swift; sourceTree = "<group>"; };
 		589D612419DE8AD691D1CD7C /* Recall.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Recall.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		58B258E2430D2A3F336680D2 /* RecallStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecallStore.swift; sourceTree = "<group>"; };
@@ -79,6 +82,7 @@
 		92DD1B7039E6191B76729C2C /* ClipboardCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardCaptureService.swift; sourceTree = "<group>"; };
 		99A786D21286E7D456EF199A /* RecallApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecallApp.swift; sourceTree = "<group>"; };
 		9F776F9651F812AAF0E2D7CC /* ScreenshotCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotCaptureService.swift; sourceTree = "<group>"; };
+		A46C02B818E77E3EDD454F63 /* SelectionClipboardFallbackServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionClipboardFallbackServiceTests.swift; sourceTree = "<group>"; };
 		BA4714F128503F1DA951FAD4 /* ShortcutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutSettingsView.swift; sourceTree = "<group>"; };
 		C336D158132271B6AA133236 /* AccessibilitySelectionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilitySelectionServiceTests.swift; sourceTree = "<group>"; };
 		C87475464FC1A84612F1AC0D /* RecallStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecallStoreTests.swift; sourceTree = "<group>"; };
@@ -183,6 +187,7 @@
 				7BE2B289FC546EE041B98B45 /* RecallContractTests.swift */,
 				C87475464FC1A84612F1AC0D /* RecallStoreTests.swift */,
 				18EA95D7013148198B81BC8D /* ScreenshotCaptureServiceTests.swift */,
+				A46C02B818E77E3EDD454F63 /* SelectionClipboardFallbackServiceTests.swift */,
 			);
 			path = RecallTests;
 			sourceTree = "<group>";
@@ -203,6 +208,7 @@
 				71391B6B888FE7C1EF3039E7 /* GlobalShortcutCenter.swift */,
 				9F776F9651F812AAF0E2D7CC /* ScreenshotCaptureService.swift */,
 				DDD0725565560AE1D29C8887 /* ScreenshotTextExtractor.swift */,
+				3F99204CB67ACB2CF20FE08B /* SelectionClipboardFallbackService.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
@@ -335,6 +341,7 @@
 				A2534BDF787EB07111ED403E /* RecallContractTests.swift in Sources */,
 				03418CFA47D2C29A01C55E3C /* RecallStoreTests.swift in Sources */,
 				76AC270354C21BA5411B759A /* ScreenshotCaptureServiceTests.swift in Sources */,
+				74A8840A29B59DB720580574 /* SelectionClipboardFallbackServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -366,6 +373,7 @@
 				B0832794501407BD71E1BE19 /* RecallStore.swift in Sources */,
 				AE10E65C5CE451302A75B51F /* ScreenshotCaptureService.swift in Sources */,
 				875C528DF07F73F9B52EC956 /* ScreenshotTextExtractor.swift in Sources */,
+				2988F7490429FF163EE093D0 /* SelectionClipboardFallbackService.swift in Sources */,
 				270B9870A81D0A369487F31D /* ShortcutSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

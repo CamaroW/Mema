@@ -48,12 +48,34 @@ struct ShortcutSettingsView: View {
                         }
                     }
                 }
+
+                Divider()
+
+                Toggle(
+                    "Clipboard Compatibility Mode",
+                    isOn: Binding(
+                        get: { store.selectionClipboardFallbackIsEnabled },
+                        set: { store.setSelectionClipboardFallbackEnabled($0) }
+                    )
+                )
+                Text(
+                    "For apps that pass Recall's safety checks but do not expose selected "
+                        + "text, Capture Selection can send Copy twice to the same verified "
+                        + "control, confirm matching results, and attempt to restore the "
+                        + "previous clipboard."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             } header: {
                 Text("Selection access")
             } footer: {
                 Text(
                     "Recall reads selected text only when you use Capture Selection. "
-                        + "Clipboard and screenshot capture do not use Accessibility access."
+                        + "Clipboard and screenshot capture do not use Accessibility access. "
+                        + "macOS does not expose clipboard-writer identity or an atomic restore, "
+                        + "so rare races or a very delayed Copy can still change the clipboard. "
+                        + "Clipboard history apps and Universal Clipboard may record the "
+                        + "temporary copies."
                 )
             }
 

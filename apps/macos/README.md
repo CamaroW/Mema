@@ -153,6 +153,35 @@ Accessibility is disabled. Use one stably signed Recall copy during acceptance
 so the permission row, running process, and shortcut owner all refer to the same
 application identity.
 
+### Clipboard Compatibility Mode
+
+Some applications can copy selected text but do not expose it through the
+Accessibility selected-text attribute. **Settings > Selection access >
+Clipboard Compatibility Mode** is an off-by-default fallback for those apps.
+It is considered only after Recall has confirmed the external focused control
+is not secure or protected; permission, focus, unknown-safety, no-selection,
+empty, oversized, and cancelled reads never synthesize Copy.
+
+When enabled, Recall retains a ticket for the exact AX application and focused
+control that passed complete non-secure checks but failed selected-text lookup.
+It waits for the shortcut modifiers to be released, deep-copies bounded ordered
+pasteboard items and types into memory, and revalidates that same control
+immediately before each of two Copy attempts. It accepts text only when both
+attempts produce consecutive change counts and matching complete clipboard
+payloads. It then attempts restoration only while the last observed count is
+unchanged. The AX and pasteboard transaction runs on its own serial actor rather
+than `MainActor`, so a slow source app or lazy pasteboard provider does not block
+Recall's UI. The backup is not logged, persisted, or sent to the backend.
+
+Restoration cannot be guaranteed or made invisible. macOS exposes neither the
+writer behind a change count nor an atomic compare-and-restore operation. The
+two matching Copy results reject common competing-writer races, but a sufficiently
+narrow race, a source app that processes Copy after Recall's timeout, a crash, or
+a pasteboard write failure can still change the clipboard. Clipboard history
+apps, Universal Clipboard, and other observers may record either temporary copy.
+Keep the mode disabled if that tradeoff is not acceptable; the explicit
+clipboard shortcut remains available.
+
 ## Build and test from the command line
 
 Run from the repository root. The explicit Derived Data path keeps generated
@@ -310,9 +339,11 @@ Run the build and tests again after regeneration.
 - App sandboxing, notarization, and bundling the Python service are outside the
   current P0 Build Week scope.
 
-The D-034 command-line suite executes 108/108 Accessibility, contract,
-networking, production Vision, global-shortcut, lifecycle, validation, retry,
-polling, store, window-placement, and signing-identity tests.
+The original D-034 command-line suite executed 108/108 tests. With the D-035
+clipboard transaction and privacy coverage, the current suite executes 145/145
+Accessibility, pasteboard, contract, networking, production Vision,
+global-shortcut, lifecycle, validation, retry, polling, store, window-placement,
+and signing-identity tests.
 
 ## Manual test matrix
 
@@ -330,7 +361,8 @@ after rerunning them on the current integrated tree.
 | Global clipboard | Close the main window without quitting Recall, focus another app with 32 known clipboard characters, and press `Option+Shift+Command+C` twice. | Quick Capture opens with the exact 32 characters. The second trigger preserves the existing draft and shows an explanatory notice. |
 | Accessibility permission | With Recall absent or disabled in **Privacy & Security > Accessibility**, select text in another app and press `Option+Shift+Command+S`; then grant access and retry. | The first attempt reads and saves nothing, explains the permission, and offers System Settings/current-clipboard recovery. After authorization, Settings reports access enabled and a new explicit attempt can read the selection. |
 | Global selection | Close the main window without quitting Recall, select known Chinese/emoji/multiline text in TextEdit, and press `Option+Shift+Command+S`. Repeat near each screen edge and with no selection. | Quick Capture shows the exact text and Unicode count, opens near the selection while staying inside the visible screen, focuses the optional note, and saves only after review. No-selection stays unsaved with an actionable fallback. |
-| Accessibility compatibility | Repeat selection capture in Safari/Chrome, selectable PDF text in Preview, and an Electron or custom-drawn control. Try a password field and a selection longer than 12,000 characters. | Supported apps produce exact text and best-effort positioning. Unsupported controls fail clearly without stale clipboard substitution. Secure and oversized text never becomes a draft or request. |
+| Accessibility compatibility | Repeat selection capture in Safari/Chrome, selectable PDF text in Preview, and an Electron or custom-drawn control with Clipboard Compatibility Mode off. Try a password field and a selection longer than 12,000 characters. | Supported apps produce exact text and best-effort positioning. Unsupported controls fail clearly without touching the clipboard. Secure, unknown-safety, and oversized text never becomes a draft or request. |
+| Clipboard compatibility | Put known plain text, rich text, an image, and Finder files on the clipboard in turn. Enable Clipboard Compatibility Mode, select known text in WeChat, and press `Option+Shift+Command+S`. Also try no selection, a password field, rapid repeats, switching controls/apps, and manually changing the clipboard during capture. | Eligible WeChat text opens as a selection draft and discloses two temporary Copies. The prior clipboard is restored with all materialized representations in the normal path. Detected focus/payload/count races create no draft and do not attempt restoration; because macOS has no writer identity or atomic restore, verify the clipboard manually rather than claiming zero race risk. Clipboard-history tools may retain the transient selection. |
 | Global screenshot | Close the main window without quitting Recall, focus another app, and press `Option+Shift+Command+4`; cancel once and complete a region once. | The selector starts without blocking Recall. Cancellation leaves no draft or temporary PNG; a completed region opens the existing screenshot draft and disclosure UI. |
 | GPT screenshot note | Choose **Capture Screenshot Note**, select a text region, keep **GPT · Cloud**, and choose **Extract source text**. | A preview appears before upload, the UI states the cloud boundary, extracted text fills only the source field, your optional personal note stays separate, and only text is saved. |
 | Local screenshot note | Repeat with **Apple Vision · On device**, disconnect the network after the backend is already running, and extract. | Text extraction succeeds on the Mac, the UI confirms local processing, and no `/v1/ocr` request is made. Saving still uses the localhost Capture API. |

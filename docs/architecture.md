@@ -105,6 +105,7 @@ Carbon Selection hotkey / menu command
  AccessibilitySelectionService ─ permission / focused external app
                  │                secure + protected-content checks
                  ├─ AXSelectedText ────────────────┐
+                 ├─ eligible failure ─ opt-in clipboard transaction
                  └─ AXSelectedTextRange            │
                             │                       │
                       AXBoundsForRange              │
@@ -130,10 +131,33 @@ that screen's `visibleFrame`.
 The native UI distinguishes `.selection` from `.clipboard`, but Save maps both
 to the existing `source_type: clipboard` request. Only exact selected text,
 bounded source-app name, and the optional note enter that request. Window title,
-URL, surrounding context, selected range, and screen bounds are never submitted
-or persisted. Accessibility failures never silently substitute clipboard data;
-the user may explicitly review the current clipboard or use the established
-clipboard shortcut.
+URL, surrounding context, selected range, screen bounds, and any clipboard
+backup are never submitted or persisted. By default Accessibility failures do
+not substitute clipboard data; the user may explicitly review the current
+clipboard or use the established clipboard shortcut.
+
+D-035 adds an opt-in compatibility branch without changing that default. The
+AX read returns a fallback ticket only for the exact application and focused
+control whose selected-text attribute failed after complete non-secure/protected
+evidence. Permission, focus, unknown-safety, secure/protected, no-selection,
+empty, and oversized errors bypass `SelectionClipboardFallbackService`. The
+service waits for shortcut modifiers to release, deep-copies the bounded ordered
+pasteboard items/types into memory, then revalidates the same PID, AX element,
+safety attributes, event-posting access, and Secure Event Input immediately
+before Copy. It requires two Copy attempts from that same control to produce
+consecutive change counts and matching complete payloads before accepting text.
+The full cross-process AX and pasteboard transaction is isolated on a serial
+actor outside `MainActor`; only the resulting snapshot or error returns to the
+main-actor store, so a slow pasteboard owner cannot synchronously freeze the UI.
+
+`NSPasteboard.changeCount` detects many stale or competing writes but does not
+identify a writer, and AppKit offers no atomic compare-and-restore. Recall
+therefore attempts restoration only after the double confirmation and only while
+the last observed count remains unchanged; detected ambiguity stops without a
+draft or restore. A sufficiently narrow writer race, a Copy processed after the
+bounded wait, a crash, or a restore failure can still change the clipboard.
+Clipboard observers and Universal Clipboard may see both transient source-app
+copies. Settings exposes the off-by-default toggle and these limitations.
 
 Legacy `globalShortcutConfiguration.v1` data decodes the new selection field
 additively and is rewritten without losing screenshot/clipboard choices. If the

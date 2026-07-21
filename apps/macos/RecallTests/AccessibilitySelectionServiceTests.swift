@@ -43,6 +43,7 @@ final class AccessibilitySelectionServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.text, originalText)
         XCTAssertEqual(snapshot.sourceApplication, "Pages")
         XCTAssertEqual(snapshot.selectionBoundsInAXScreenCoordinates, bounds)
+        XCTAssertEqual(snapshot.captureMethod, .accessibility)
         XCTAssertEqual(
             backend.calls,
             [
@@ -95,7 +96,18 @@ final class AccessibilitySelectionServiceTests: XCTestCase {
         let backend = AccessibilityBackendStub(subroleError: .cannotComplete)
         let service = AccessibilitySelectionService(backend: backend)
 
-        await assertReadThrows(.selectionUnavailable) {
+        await assertReadThrows(.selectionSafetyUnavailable) {
+            try await service.readSelection(promptIfNeeded: false)
+        }
+
+        XCTAssertFalse(backend.calls.contains(.selectedText))
+    }
+
+    func testProtectedContentReadFailureCannotEnableClipboardFallback() async {
+        let backend = AccessibilityBackendStub(protectedContentError: .cannotComplete)
+        let service = AccessibilitySelectionService(backend: backend)
+
+        await assertReadThrows(.selectionSafetyUnavailable) {
             try await service.readSelection(promptIfNeeded: false)
         }
 
@@ -184,6 +196,77 @@ final class AccessibilitySelectionServiceTests: XCTestCase {
         }
     }
 
+    func testFallbackReadReturnsTicketForTheExactCheckedApplicationAndControl() async throws {
+        let backend = AccessibilityBackendStub(
+            selectedTextError: .unsupported,
+            sourceApplication: "WeChat",
+            processIdentifier: 4_201
+        )
+        let service = AccessibilitySelectionService(backend: backend)
+
+        let outcome = try await service.readSelectionForClipboardFallback(
+            promptIfNeeded: false
+        )
+
+        guard case let .clipboardFallback(ticket) = outcome else {
+            return XCTFail("Expected a clipboard fallback ticket")
+        }
+        XCTAssertEqual(ticket.processIdentifier, 4_201)
+        XCTAssertEqual(ticket.sourceApplication, "WeChat")
+        XCTAssertNil(ticket.systemFocusedElement)
+        XCTAssertEqual(
+            backend.calls,
+            [
+                .trust(promptIfNeeded: false),
+                .focusedApplication,
+                .currentApplication,
+                .focusedElement,
+                .subrole,
+                .protectedContent,
+                .selectedText,
+                .fallbackTicket,
+            ]
+        )
+    }
+
+    func testSelectedTextFailureIsNotFallbackEligibleWithoutCompleteSafetyEvidence() async {
+        let missingSubroleEvidence = AccessibilityBackendStub(
+            subroleWasAvailable: false,
+            selectedTextError: .unsupported
+        )
+        let missingProtectedEvidence = AccessibilityBackendStub(
+            protectedContentWasAvailable: false,
+            selectedTextError: .cannotComplete
+        )
+
+        for backend in [missingSubroleEvidence, missingProtectedEvidence] {
+            let service = AccessibilitySelectionService(backend: backend)
+            await assertReadThrows(.selectionSafetyUnavailable) {
+                try await service.readSelection(promptIfNeeded: false)
+            }
+        }
+    }
+
+    func testOnlyPostSafetySelectedTextFailureAllowsClipboardFallback() {
+        XCTAssertTrue(AccessibilitySelectionError.selectionUnavailable.allowsClipboardFallback)
+        for error in [
+            AccessibilitySelectionError.permissionRequired,
+            .noFocusedApplication,
+            .currentApplication,
+            .noFocusedElement,
+            .secureTextInput,
+            .selectionSafetyUnavailable,
+            .noSelection,
+            .emptySelection,
+            .selectionTooLong,
+            .clipboardFallbackUnavailable,
+            .clipboardChangedDuringFallback,
+            .clipboardRestoreFailed,
+        ] {
+            XCTAssertFalse(error.allowsClipboardFallback, "Unexpected: \(error)")
+        }
+    }
+
     func testFocusFailuresHaveStableMappings() async {
         let applicationBackend = AccessibilityBackendStub(
             focusedApplicationError: .cannotComplete
@@ -235,7 +318,7 @@ final class AccessibilitySelectionServiceTests: XCTestCase {
         )
         XCTAssertTrue(
             AccessibilitySelectionError.selectionUnavailable.localizedDescription
-                .contains("Capture Clipboard")
+                .contains("Clipboard Compatibility Mode")
         )
         XCTAssertTrue(
             AccessibilitySelectionError.secureTextInput.localizedDescription
@@ -273,6 +356,7 @@ private enum AccessibilityBackendCall: Equatable, Sendable {
     case selectedText
     case selectionBounds
     case sourceApplication
+    case fallbackTicket
 }
 
 private enum AccessibilityStubElement: Sendable {
@@ -292,13 +376,16 @@ private final class AccessibilityBackendStub:
     private let focusedElementError: AccessibilitySelectionBackendError?
     private let subroleValue: String?
     private let subroleError: AccessibilitySelectionBackendError?
+    private let subroleWasAvailable: Bool
     private let protectedContent: Bool
     private let protectedContentError: AccessibilitySelectionBackendError?
+    private let protectedContentWasAvailable: Bool
     private let selectedTextValue: String?
     private let selectedTextError: AccessibilitySelectionBackendError?
     private let boundsValue: CGRect?
     private let boundsError: AccessibilitySelectionBackendError?
     private let applicationName: String?
+    private let applicationProcessIdentifier: pid_t
 
     private let lock = NSLock()
     private var recordedCalls: [AccessibilityBackendCall] = []
@@ -309,15 +396,18 @@ private final class AccessibilityBackendStub:
         focusedApplicationError: AccessibilitySelectionBackendError? = nil,
         isCurrentApplication: Bool = false,
         focusedElementError: AccessibilitySelectionBackendError? = nil,
-        subrole: String? = nil,
+        subrole: String? = "AXTextField",
         subroleError: AccessibilitySelectionBackendError? = nil,
+        subroleWasAvailable: Bool = true,
         containsProtectedContent: Bool = false,
         protectedContentError: AccessibilitySelectionBackendError? = nil,
+        protectedContentWasAvailable: Bool = true,
         selectedText: String? = "Selected text",
         selectedTextError: AccessibilitySelectionBackendError? = nil,
         bounds: CGRect? = nil,
         boundsError: AccessibilitySelectionBackendError? = nil,
-        sourceApplication: String? = "TextEdit"
+        sourceApplication: String? = "TextEdit",
+        processIdentifier: pid_t = 4_200
     ) {
         trusted = isTrusted
         self.focusedApplicationError = focusedApplicationError
@@ -325,13 +415,16 @@ private final class AccessibilityBackendStub:
         self.focusedElementError = focusedElementError
         subroleValue = subrole
         self.subroleError = subroleError
+        self.subroleWasAvailable = subroleWasAvailable
         protectedContent = containsProtectedContent
         self.protectedContentError = protectedContentError
+        self.protectedContentWasAvailable = protectedContentWasAvailable
         selectedTextValue = selectedText
         self.selectedTextError = selectedTextError
         boundsValue = bounds
         self.boundsError = boundsError
         applicationName = sourceApplication
+        applicationProcessIdentifier = processIdentifier
     }
 
     var calls: [AccessibilityBackendCall] {
@@ -366,16 +459,27 @@ private final class AccessibilityBackendStub:
         return .focusedElement
     }
 
-    func subrole(of element: AccessibilityStubElement) throws -> String? {
+    func securityInspection(
+        of element: AccessibilityStubElement
+    ) throws -> AccessibilitySelectionSecurityInspection {
         record(.subrole)
         if let subroleError { throw subroleError }
-        return subroleValue
-    }
+        if subroleValue?.caseInsensitiveCompare("AXSecureTextField") == .orderedSame {
+            return AccessibilitySelectionSecurityInspection(
+                subrole: subroleValue,
+                containsProtectedContent: false,
+                hasCompleteFallbackEvidence: false
+            )
+        }
 
-    func containsProtectedContent(of element: AccessibilityStubElement) throws -> Bool {
         record(.protectedContent)
         if let protectedContentError { throw protectedContentError }
-        return protectedContent
+        return AccessibilitySelectionSecurityInspection(
+            subrole: subroleValue,
+            containsProtectedContent: protectedContent,
+            hasCompleteFallbackEvidence: subroleWasAvailable
+                && protectedContentWasAvailable
+        )
     }
 
     func selectedText(of element: AccessibilityStubElement) throws -> String? {
@@ -393,6 +497,17 @@ private final class AccessibilityBackendStub:
     func sourceApplicationName(for application: AccessibilityStubElement) -> String? {
         record(.sourceApplication)
         return applicationName
+    }
+
+    func clipboardFallbackTicket(
+        for application: AccessibilityStubElement,
+        focusedElement: AccessibilityStubElement
+    ) throws -> AccessibilitySelectionFallbackTicket {
+        record(.fallbackTicket)
+        return AccessibilitySelectionFallbackTicket(
+            processIdentifier: applicationProcessIdentifier,
+            sourceApplication: applicationName
+        )
     }
 
     private func record(_ call: AccessibilityBackendCall) {

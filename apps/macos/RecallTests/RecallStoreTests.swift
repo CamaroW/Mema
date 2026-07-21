@@ -155,6 +155,192 @@ final class RecallStoreTests: XCTestCase {
         XCTAssertTrue(store.quickCaptureError?.contains("Accessibility") == true)
     }
 
+    func testEligibleAccessibilityFailureUsesEnabledClipboardFallback() async {
+        let accessibilityService = AccessibilitySelectionServiceStub(
+            result: .failure(.selectionUnavailable)
+        )
+        let fallbackService = SelectionClipboardFallbackServiceStub(
+            result: .success(
+                AccessibilitySelectionSnapshot(
+                    text: " 微信 fallback 👋\nsecond line ",
+                    sourceApplication: "WeChat",
+                    selectionBoundsInAXScreenCoordinates: nil,
+                    captureMethod: .clipboardFallback
+                )
+            )
+        )
+        let store = RecallStore(
+            client: RecordingAPIClient(),
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            accessibilitySelectionService: accessibilityService,
+            selectionClipboardFallbackService: fallbackService,
+            selectionClipboardFallbackIsEnabled: true
+        )
+
+        let snapshot = await store.prepareAccessibilitySelectionCapture()
+
+        XCTAssertEqual(snapshot?.captureMethod, .clipboardFallback)
+        XCTAssertEqual(store.quickCaptureDraft?.kind, .selection)
+        XCTAssertEqual(store.quickCaptureDraft?.selectionCaptureMethod, .clipboardFallback)
+        XCTAssertEqual(
+            store.quickCaptureDraft?.selectedText,
+            " 微信 fallback 👋\nsecond line "
+        )
+        XCTAssertEqual(store.quickCaptureDraft?.sourceApplication, "WeChat")
+        XCTAssertNil(store.accessibilitySelectionError)
+        XCTAssertEqual(fallbackService.captureCount, 1)
+        XCTAssertEqual(fallbackService.capturedTickets.first?.processIdentifier, 4_242)
+    }
+
+    func testDisabledClipboardFallbackPreservesExplicitRecoveryWithoutReadingClipboard() async {
+        let fallbackService = SelectionClipboardFallbackServiceStub(
+            result: .failure(SelectionClipboardFallbackError.copyTimedOut)
+        )
+        let store = RecallStore(
+            client: RecordingAPIClient(),
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            accessibilitySelectionService: AccessibilitySelectionServiceStub(
+                result: .failure(.selectionUnavailable)
+            ),
+            selectionClipboardFallbackService: fallbackService,
+            selectionClipboardFallbackIsEnabled: false
+        )
+
+        let snapshot = await store.prepareAccessibilitySelectionCapture()
+
+        XCTAssertNil(snapshot)
+        XCTAssertNil(store.quickCaptureDraft)
+        XCTAssertEqual(store.accessibilitySelectionError, .selectionUnavailable)
+        XCTAssertEqual(fallbackService.captureCount, 0)
+    }
+
+    func testClipboardFallbackNeverRunsForIneligibleAccessibilityFailures() async {
+        let ineligibleErrors: [AccessibilitySelectionError] = [
+            .permissionRequired,
+            .noFocusedApplication,
+            .currentApplication,
+            .noFocusedElement,
+            .secureTextInput,
+            .selectionSafetyUnavailable,
+            .noSelection,
+            .emptySelection,
+            .selectionTooLong,
+        ]
+
+        for selectionError in ineligibleErrors {
+            let fallbackService = SelectionClipboardFallbackServiceStub(
+                result: .failure(SelectionClipboardFallbackError.copyTimedOut)
+            )
+            let store = RecallStore(
+                client: RecordingAPIClient(),
+                clipboardService: ClipboardServiceStub(
+                    result: .failure(ClipboardCaptureError.noText)
+                ),
+                accessibilitySelectionService: AccessibilitySelectionServiceStub(
+                    result: .failure(selectionError)
+                ),
+                selectionClipboardFallbackService: fallbackService,
+                selectionClipboardFallbackIsEnabled: true
+            )
+
+            _ = await store.prepareAccessibilitySelectionCapture()
+
+            XCTAssertEqual(store.accessibilitySelectionError, selectionError)
+            XCTAssertEqual(fallbackService.captureCount, 0, "Unexpected: \(selectionError)")
+        }
+    }
+
+    func testClipboardFallbackFailureHasSpecificRecoveryState() async {
+        let fallbackService = SelectionClipboardFallbackServiceStub(
+            result: .failure(SelectionClipboardFallbackError.clipboardChangedConcurrently)
+        )
+        let store = RecallStore(
+            client: RecordingAPIClient(),
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            accessibilitySelectionService: AccessibilitySelectionServiceStub(
+                result: .failure(.selectionUnavailable)
+            ),
+            selectionClipboardFallbackService: fallbackService,
+            selectionClipboardFallbackIsEnabled: true
+        )
+
+        let snapshot = await store.prepareAccessibilitySelectionCapture()
+
+        XCTAssertNil(snapshot)
+        XCTAssertNil(store.quickCaptureDraft)
+        XCTAssertEqual(
+            store.accessibilitySelectionError,
+            .clipboardChangedDuringFallback
+        )
+        XCTAssertTrue(store.quickCaptureError?.contains("competing clipboard activity") == true)
+    }
+
+    func testOversizedClipboardFallbackIsRestoredThenRejectedBeforeDraftRendering() async {
+        let fallbackService = SelectionClipboardFallbackServiceStub(
+            result: .success(
+                AccessibilitySelectionSnapshot(
+                    text: String(
+                        repeating: "x",
+                        count: RecallStore.maximumSelectedTextLength + 1
+                    ),
+                    sourceApplication: "WeChat",
+                    selectionBoundsInAXScreenCoordinates: nil,
+                    captureMethod: .clipboardFallback
+                )
+            )
+        )
+        let store = RecallStore(
+            client: RecordingAPIClient(),
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            accessibilitySelectionService: AccessibilitySelectionServiceStub(
+                result: .failure(.selectionUnavailable)
+            ),
+            selectionClipboardFallbackService: fallbackService,
+            selectionClipboardFallbackIsEnabled: true
+        )
+
+        let snapshot = await store.prepareAccessibilitySelectionCapture()
+
+        XCTAssertNil(snapshot)
+        XCTAssertNil(store.quickCaptureDraft)
+        XCTAssertEqual(store.accessibilitySelectionError, .selectionTooLong)
+        XCTAssertEqual(fallbackService.captureCount, 1)
+    }
+
+    func testClipboardFallbackPreferenceIsOptInAndPersistsExplicitChanges() {
+        let suiteName = "RecallStoreTests.clipboardFallback.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fallbackService = SelectionClipboardFallbackServiceStub(
+            result: .failure(SelectionClipboardFallbackError.copyTimedOut)
+        )
+        let store = RecallStore(
+            client: RecordingAPIClient(),
+            clipboardService: ClipboardServiceStub(
+                result: .failure(ClipboardCaptureError.noText)
+            ),
+            selectionClipboardFallbackService: fallbackService,
+            selectionClipboardFallbackIsEnabled: false,
+            selectionPreferenceUserDefaults: defaults
+        )
+
+        XCTAssertFalse(store.selectionClipboardFallbackIsEnabled)
+        store.setSelectionClipboardFallbackEnabled(true)
+
+        XCTAssertTrue(store.selectionClipboardFallbackIsEnabled)
+        XCTAssertTrue(
+            defaults.bool(forKey: RecallStore.selectionClipboardFallbackUserDefaultsKey)
+        )
+    }
+
     func testOversizedAccessibilitySelectionIsRejectedBeforeDraftRendering() async {
         let oversized = String(
             repeating: "x",
@@ -1236,6 +1422,25 @@ private actor AccessibilitySelectionServiceStub: AccessibilitySelectionServing {
         return try result.get()
     }
 
+    func readSelectionForClipboardFallback(
+        promptIfNeeded: Bool
+    ) async throws -> AccessibilitySelectionReadOutcome {
+        reads += 1
+        readPrompts.append(promptIfNeeded)
+        do {
+            return .selection(try result.get())
+        } catch let error where error == .selectionUnavailable {
+            return .clipboardFallback(
+                AccessibilitySelectionFallbackTicket(
+                    processIdentifier: 4_242,
+                    sourceApplication: "WeChat"
+                )
+            )
+        } catch {
+            throw error
+        }
+    }
+
     func readCount() -> Int { reads }
     func readPromptValues() -> [Bool] { readPrompts }
 }
@@ -1255,12 +1460,39 @@ private actor SuspendedAccessibilitySelectionService: AccessibilitySelectionServ
         }
     }
 
+    func readSelectionForClipboardFallback(
+        promptIfNeeded: Bool
+    ) async throws -> AccessibilitySelectionReadOutcome {
+        .selection(try await readSelection(promptIfNeeded: promptIfNeeded))
+    }
+
     func readCount() -> Int { reads }
 
     func complete(with result: Result<AccessibilitySelectionSnapshot, Error>) {
         let continuation = continuation
         self.continuation = nil
         continuation?.resume(with: result)
+    }
+}
+
+@MainActor
+private final class SelectionClipboardFallbackServiceStub:
+    SelectionClipboardFallbackServing
+{
+    private let result: Result<AccessibilitySelectionSnapshot, Error>
+    private(set) var captureCount = 0
+    private(set) var capturedTickets: [AccessibilitySelectionFallbackTicket] = []
+
+    init(result: Result<AccessibilitySelectionSnapshot, Error>) {
+        self.result = result
+    }
+
+    func captureSelection(
+        using ticket: AccessibilitySelectionFallbackTicket
+    ) async throws -> AccessibilitySelectionSnapshot {
+        captureCount += 1
+        capturedTickets.append(ticket)
+        return try result.get()
     }
 }
 

@@ -35,9 +35,13 @@ split; they are no longer assignment gates.
   regression. Its explicit 344 × 510 root and internal scroller pass 68/68
   extension tests plus selected and metadata-only real-Chrome checks.
 - D-034 implements explicit native Accessibility selection capture on
-  `codex/native-accessibility-selection`. Its 108/108 macOS tests pass; real-app
-  permission, cross-application compatibility, positioning, and physical
-  shortcut acceptance remain open before merge.
+  `codex/native-accessibility-selection`. Its 108/108 macOS tests and the user's
+  primary-path acceptance pass. WeChat's unsupported selected-text attribute
+  motivated the separately gated D-035 compatibility fallback.
+- D-035 extends the same draft PR with an off-by-default transactional clipboard
+  compatibility mode for apps such as WeChat. It is restricted to post-safety
+  selected-text failures. Its current host suite passes 145/145; B-016
+  clipboard-preservation acceptance remains open.
 - The macOS app and Chrome extension are separate clients of the loopback
   FastAPI service. The app does not yet package or start that service.
 
@@ -92,17 +96,24 @@ not approval from a particular historical developer role.
    screenshot shortcut completed a non-empty region, and the clipboard shortcut
    opened Capture after text was copied. The app must be running; launch at
    login remains a separate opt-in improvement.
-4. **Native Accessibility selection — implemented, awaiting real-device
-   acceptance.** D-034 adds configurable `Option+Shift+Command+S`. Only after
+4. **Native Accessibility selection — implemented, compatibility fallback in
+   validation.** D-034 adds configurable `Option+Shift+Command+S`. Only after
    that explicit action, Recall reads the focused external app's selected text
    and best-effort bounds off the main actor, rejects self/secure/protected/
    empty/oversized input, and opens the existing review UI near the selection.
    Bounds stay transient and the reviewed draft uses the existing clipboard-text
    contract with no surrounding context. Existing two-action shortcut settings
    migrate safely, including an external conflict fallback that preserves the
-   old actions. The 108/108 host suite passes; do not merge until the D-034
-   TextEdit, browser/PDF, permission, screen-edge, and physical-hotkey matrix is
-   complete.
+   old actions. The original 108/108 host suite passes. D-035 adds a separately
+   persisted, off-by-default Clipboard Compatibility Mode. A selected-text
+   failure after complete security evidence creates a ticket for the exact PID
+   and focused AX element. Recall revalidates that ticket before two Copy
+   attempts, accepts only matching consecutive results, and then performs a
+   best-effort restore. macOS has no writer identity or atomic restore, so the
+   UI and documentation disclose residual writer and delayed-Copy races. The
+   expanded host suite passes 145/145. Do not merge until B-016 covers WeChat,
+   real rich clipboard formats, password fields, races, screen edges, and
+   physical shortcuts.
 5. **App-managed local service lifecycle.** Define how a packaged Recall app
    starts, monitors, and stops the backend without assuming a repository checkout
    or terminal command. Keep this separate from browser native messaging.

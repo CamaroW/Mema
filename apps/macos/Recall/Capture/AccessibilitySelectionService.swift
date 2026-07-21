@@ -3,6 +3,11 @@
 import CoreGraphics
 import Foundation
 
+enum NativeSelectionCaptureMethod: Equatable, Sendable {
+    case accessibility
+    case clipboardFallback
+}
+
 /// Text selected in the application that currently owns the system-wide AX focus.
 struct AccessibilitySelectionSnapshot: Equatable, Sendable {
     let text: String
@@ -15,6 +20,19 @@ struct AccessibilitySelectionSnapshot: Equatable, Sendable {
     /// layer owns conversion into AppKit coordinates because it also has the
     /// current screen layout needed to position and clamp a window correctly.
     let selectionBoundsInAXScreenCoordinates: CGRect?
+    let captureMethod: NativeSelectionCaptureMethod
+
+    init(
+        text: String,
+        sourceApplication: String?,
+        selectionBoundsInAXScreenCoordinates: CGRect?,
+        captureMethod: NativeSelectionCaptureMethod = .accessibility
+    ) {
+        self.text = text
+        self.sourceApplication = sourceApplication
+        self.selectionBoundsInAXScreenCoordinates = selectionBoundsInAXScreenCoordinates
+        self.captureMethod = captureMethod
+    }
 }
 
 /// Stable, user-facing failures from an explicit Accessibility selection read.
@@ -24,10 +42,14 @@ enum AccessibilitySelectionError: Error, Equatable, LocalizedError, Sendable {
     case currentApplication
     case noFocusedElement
     case secureTextInput
+    case selectionSafetyUnavailable
     case selectionUnavailable
     case noSelection
     case emptySelection
     case selectionTooLong
+    case clipboardFallbackUnavailable
+    case clipboardChangedDuringFallback
+    case clipboardRestoreFailed
 
     var errorDescription: String? {
         switch self {
@@ -58,10 +80,18 @@ enum AccessibilitySelectionError: Error, Equatable, LocalizedError, Sendable {
                 "Recall does not read selections from password or secure text fields.",
                 comment: "Selection capture is blocked for secure text fields"
             )
+        case .selectionSafetyUnavailable:
+            return NSLocalizedString(
+                "Recall could not verify that this control is safe to copy, so it did not use "
+                    + "Clipboard Compatibility Mode. Copy the text yourself and use Capture "
+                    + "Clipboard instead.",
+                comment: "Selection security attributes could not be verified"
+            )
         case .selectionUnavailable:
             return NSLocalizedString(
                 "The focused control does not make its selected text available to macOS "
-                    + "Accessibility. Copy the text and use Capture Clipboard instead.",
+                    + "Accessibility. You can enable Clipboard Compatibility Mode in Shortcut "
+                    + "Settings, then return to the app and try again.",
                 comment: "The focused control does not support Accessibility selection reads"
             )
         case .noSelection:
@@ -80,14 +110,74 @@ enum AccessibilitySelectionError: Error, Equatable, LocalizedError, Sendable {
                     + "and try again; Recall did not truncate or save it.",
                 comment: "The Accessibility text selection exceeded the source limit"
             )
+        case .clipboardFallbackUnavailable:
+            return NSLocalizedString(
+                "Recall could not safely complete the clipboard compatibility fallback. Check "
+                    + "your clipboard because it may contain an attempted copy, then copy the "
+                    + "text yourself and use Capture Clipboard instead.",
+                comment: "The clipboard selection fallback could not complete safely"
+            )
+        case .clipboardChangedDuringFallback:
+            return NSLocalizedString(
+                "Recall detected competing clipboard activity and stopped without preparing a "
+                    + "capture. Check your clipboard before continuing.",
+                comment: "Another clipboard writer raced the selection fallback"
+            )
+        case .clipboardRestoreFailed:
+            return NSLocalizedString(
+                "Recall captured the temporary copy but could not restore the previous "
+                    + "clipboard contents. Check your clipboard before continuing.",
+                comment: "The clipboard selection fallback could not restore the old contents"
+            )
         }
     }
+
+    var allowsClipboardFallback: Bool {
+        self == .selectionUnavailable
+    }
+}
+
+struct AccessibilitySelectionSecurityInspection: Equatable, Sendable {
+    let subrole: String?
+    let containsProtectedContent: Bool
+    let hasCompleteFallbackEvidence: Bool
+}
+
+/// Evidence captured from the exact AX application and focused control whose
+/// selected-text lookup failed after complete non-secure checks. The system
+/// clipboard backend retains the AX element so it can require the same control
+/// immediately before posting Copy.
+struct AccessibilitySelectionFallbackTicket: @unchecked Sendable {
+    let identifier: UUID
+    let processIdentifier: pid_t
+    let sourceApplication: String?
+    let systemFocusedElement: AXUIElement?
+
+    init(
+        identifier: UUID = UUID(),
+        processIdentifier: pid_t,
+        sourceApplication: String?,
+        systemFocusedElement: AXUIElement? = nil
+    ) {
+        self.identifier = identifier
+        self.processIdentifier = processIdentifier
+        self.sourceApplication = sourceApplication
+        self.systemFocusedElement = systemFocusedElement
+    }
+}
+
+enum AccessibilitySelectionReadOutcome: @unchecked Sendable {
+    case selection(AccessibilitySelectionSnapshot)
+    case clipboardFallback(AccessibilitySelectionFallbackTicket)
 }
 
 /// Async so callers never need to perform cross-process AX messaging on the main actor.
 protocol AccessibilitySelectionServing: Sendable {
     func isTrusted(promptIfNeeded: Bool) async -> Bool
     func readSelection(promptIfNeeded: Bool) async throws -> AccessibilitySelectionSnapshot
+    func readSelectionForClipboardFallback(
+        promptIfNeeded: Bool
+    ) async throws -> AccessibilitySelectionReadOutcome
 }
 
 /// A semantic boundary around AX calls. Keeping elements generic lets unit tests
@@ -99,11 +189,16 @@ protocol AccessibilitySelectionBackend: Sendable {
     func focusedApplication() throws -> Element
     func isCurrentApplication(_ application: Element) -> Bool
     func focusedElement(in application: Element) throws -> Element
-    func subrole(of element: Element) throws -> String?
-    func containsProtectedContent(of element: Element) throws -> Bool
+    func securityInspection(
+        of element: Element
+    ) throws -> AccessibilitySelectionSecurityInspection
     func selectedText(of element: Element) throws -> String?
     func selectionBounds(of element: Element) throws -> CGRect?
     func sourceApplicationName(for application: Element) -> String?
+    func clipboardFallbackTicket(
+        for application: Element,
+        focusedElement: Element
+    ) throws -> AccessibilitySelectionFallbackTicket
 }
 
 /// Generic implementation shared by the real AX backend and deterministic tests.
@@ -134,8 +229,33 @@ struct AccessibilitySelectionService<Backend: AccessibilitySelectionBackend>:
     func readSelection(
         promptIfNeeded: Bool
     ) async throws -> AccessibilitySelectionSnapshot {
+        switch try await readSelectionOutcome(
+            promptIfNeeded: promptIfNeeded,
+            allowsClipboardFallbackTicket: false
+        ) {
+        case let .selection(snapshot):
+            return snapshot
+        case .clipboardFallback:
+            throw AccessibilitySelectionError.selectionUnavailable
+        }
+    }
+
+    func readSelectionForClipboardFallback(
+        promptIfNeeded: Bool
+    ) async throws -> AccessibilitySelectionReadOutcome {
+        try await readSelectionOutcome(
+            promptIfNeeded: promptIfNeeded,
+            allowsClipboardFallbackTicket: true
+        )
+    }
+
+    private func readSelectionOutcome(
+        promptIfNeeded: Bool,
+        allowsClipboardFallbackTicket: Bool
+    ) async throws -> AccessibilitySelectionReadOutcome {
         let backend = backend
         let task = Task.detached(priority: .userInitiated) {
+            () throws -> AccessibilitySelectionReadOutcome in
             try Task.checkCancellation()
             guard backend.isProcessTrusted(promptIfNeeded: promptIfNeeded) else {
                 throw AccessibilitySelectionError.permissionRequired
@@ -164,27 +284,20 @@ struct AccessibilitySelectionService<Backend: AccessibilitySelectionBackend>:
 
             // The secure-subrole query intentionally precedes the selected-text
             // query. Any unexpected failure here is fail-closed: it is safer to
-            // offer the clipboard fallback than risk reading a protected field.
-            let subrole: String?
+            // reject the capture than risk reading a protected field.
+            let securityInspection: AccessibilitySelectionSecurityInspection
             do {
-                subrole = try backend.subrole(of: focusedElement)
+                securityInspection = try backend.securityInspection(of: focusedElement)
             } catch {
-                throw AccessibilitySelectionError.selectionUnavailable
+                throw AccessibilitySelectionError.selectionSafetyUnavailable
             }
-            if subrole?.caseInsensitiveCompare(Self.secureTextFieldSubrole) == .orderedSame {
+            if securityInspection.subrole?.caseInsensitiveCompare(
+                Self.secureTextFieldSubrole
+            ) == .orderedSame {
                 throw AccessibilitySelectionError.secureTextInput
             }
             try Task.checkCancellation()
-
-            let containsProtectedContent: Bool
-            do {
-                containsProtectedContent = try backend.containsProtectedContent(
-                    of: focusedElement
-                )
-            } catch {
-                throw AccessibilitySelectionError.selectionUnavailable
-            }
-            guard !containsProtectedContent else {
+            guard !securityInspection.containsProtectedContent else {
                 throw AccessibilitySelectionError.secureTextInput
             }
             try Task.checkCancellation()
@@ -197,10 +310,32 @@ struct AccessibilitySelectionService<Backend: AccessibilitySelectionBackend>:
                 case .noValue:
                     throw AccessibilitySelectionError.noSelection
                 case .unsupported, .invalidValue, .cannotComplete, .failure:
-                    throw AccessibilitySelectionError.selectionUnavailable
+                    guard securityInspection.hasCompleteFallbackEvidence else {
+                        throw AccessibilitySelectionError.selectionSafetyUnavailable
+                    }
+                    guard allowsClipboardFallbackTicket else {
+                        throw AccessibilitySelectionError.selectionUnavailable
+                    }
+                    return .clipboardFallback(
+                        try backend.clipboardFallbackTicket(
+                            for: application,
+                            focusedElement: focusedElement
+                        )
+                    )
                 }
             } catch {
-                throw AccessibilitySelectionError.selectionUnavailable
+                guard securityInspection.hasCompleteFallbackEvidence else {
+                    throw AccessibilitySelectionError.selectionSafetyUnavailable
+                }
+                guard allowsClipboardFallbackTicket else {
+                    throw AccessibilitySelectionError.selectionUnavailable
+                }
+                return .clipboardFallback(
+                    try backend.clipboardFallbackTicket(
+                        for: application,
+                        focusedElement: focusedElement
+                    )
+                )
             }
 
             guard let text else {
@@ -218,10 +353,12 @@ struct AccessibilitySelectionService<Backend: AccessibilitySelectionBackend>:
             try Task.checkCancellation()
             let sourceApplication = backend.sourceApplicationName(for: application)
             try Task.checkCancellation()
-            return AccessibilitySelectionSnapshot(
-                text: text,
-                sourceApplication: sourceApplication,
-                selectionBoundsInAXScreenCoordinates: bounds
+            return .selection(
+                AccessibilitySelectionSnapshot(
+                    text: text,
+                    sourceApplication: sourceApplication,
+                    selectionBoundsInAXScreenCoordinates: bounds
+                )
             )
         }
         return try await withTaskCancellationHandler {
@@ -252,7 +389,7 @@ enum AccessibilitySelectionBackendError: Error, Equatable, Sendable {
 }
 
 struct SystemAccessibilityElement: @unchecked Sendable {
-    fileprivate let value: AXUIElement
+    let value: AXUIElement
 }
 
 struct SystemAccessibilitySelectionBackend: AccessibilitySelectionBackend, Sendable {
@@ -317,19 +454,35 @@ struct SystemAccessibilitySelectionBackend: AccessibilitySelectionBackend, Senda
         return SystemAccessibilityElement(value: element)
     }
 
-    func subrole(of element: SystemAccessibilityElement) throws -> String? {
+    func securityInspection(
+        of element: SystemAccessibilityElement
+    ) throws -> AccessibilitySelectionSecurityInspection {
+        let subrole: String?
+        var subroleWasAvailable = true
         do {
-            return try copyStringAttribute(
+            subrole = try copyStringAttribute(
                 kAXSubroleAttribute as CFString,
                 from: element.value
             )
+            if subrole == nil {
+                subroleWasAvailable = false
+            }
         } catch let error as AccessibilitySelectionBackendError
             where error == .unsupported || error == .noValue {
-            return nil
+            subrole = nil
+            subroleWasAvailable = false
         }
-    }
 
-    func containsProtectedContent(of element: SystemAccessibilityElement) throws -> Bool {
+        if subrole?.caseInsensitiveCompare("AXSecureTextField") == .orderedSame {
+            return AccessibilitySelectionSecurityInspection(
+                subrole: subrole,
+                containsProtectedContent: false,
+                hasCompleteFallbackEvidence: false
+            )
+        }
+
+        let containsProtectedContent: Bool
+        var protectedContentWasAvailable = true
         let value: CFTypeRef?
         do {
             value = try copyAttribute(
@@ -338,13 +491,25 @@ struct SystemAccessibilitySelectionBackend: AccessibilitySelectionBackend, Senda
             )
         } catch let error as AccessibilitySelectionBackendError
             where error == .unsupported || error == .noValue {
-            return false
+            value = nil
+            protectedContentWasAvailable = false
         }
-        guard let value else { return false }
-        guard CFGetTypeID(value) == CFBooleanGetTypeID() else {
-            throw AccessibilitySelectionBackendError.invalidValue
+        if let value {
+            guard CFGetTypeID(value) == CFBooleanGetTypeID() else {
+                throw AccessibilitySelectionBackendError.invalidValue
+            }
+            containsProtectedContent = CFBooleanGetValue((value as! CFBoolean))
+        } else {
+            containsProtectedContent = false
+            protectedContentWasAvailable = false
         }
-        return CFBooleanGetValue((value as! CFBoolean))
+
+        return AccessibilitySelectionSecurityInspection(
+            subrole: subrole,
+            containsProtectedContent: containsProtectedContent,
+            hasCompleteFallbackEvidence: subroleWasAvailable
+                && protectedContentWasAvailable
+        )
     }
 
     func selectedText(of element: SystemAccessibilityElement) throws -> String? {
@@ -420,6 +585,22 @@ struct SystemAccessibilitySelectionBackend: AccessibilitySelectionBackend, Senda
             return nil
         }
         return name
+    }
+
+    func clipboardFallbackTicket(
+        for application: SystemAccessibilityElement,
+        focusedElement: SystemAccessibilityElement
+    ) throws -> AccessibilitySelectionFallbackTicket {
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(application.value, &processIdentifier) == .success,
+              processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            throw AccessibilitySelectionBackendError.invalidValue
+        }
+        return AccessibilitySelectionFallbackTicket(
+            processIdentifier: processIdentifier,
+            sourceApplication: sourceApplicationName(for: application),
+            systemFocusedElement: focusedElement.value
+        )
     }
 
     private func applyMessagingTimeout(to element: AXUIElement) {

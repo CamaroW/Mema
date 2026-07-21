@@ -12,6 +12,7 @@ struct QuickCaptureDraft: Equatable, Sendable {
     let kind: Kind
     var selectedText: String
     let sourceApplication: String?
+    let selectionCaptureMethod: NativeSelectionCaptureMethod?
     var userNote: String = ""
 
     init(
@@ -19,6 +20,7 @@ struct QuickCaptureDraft: Equatable, Sendable {
         sourceApplication: String?,
         userNote: String = "",
         kind: Kind = .clipboard,
+        selectionCaptureMethod: NativeSelectionCaptureMethod? = nil,
         clientCaptureID: String = UUID().uuidString.lowercased(),
         capturedAt: String = CaptureCreateRequest.currentTimestamp()
     ) {
@@ -27,6 +29,7 @@ struct QuickCaptureDraft: Equatable, Sendable {
         self.kind = kind
         self.selectedText = selectedText
         self.sourceApplication = sourceApplication
+        self.selectionCaptureMethod = selectionCaptureMethod
         self.userNote = userNote
     }
 
@@ -81,6 +84,8 @@ struct AppNotice: Identifiable, Equatable, Sendable {
 
 @MainActor
 final class RecallStore: ObservableObject {
+    static let selectionClipboardFallbackUserDefaultsKey =
+        "selectionClipboardFallbackEnabled.v1"
     static let maximumSelectedTextLength = 12_000
     static let maximumUserNoteLength = 4_000
     static let maximumSearchQueryLength = 512
@@ -98,6 +103,7 @@ final class RecallStore: ObservableObject {
     @Published var quickCaptureError: String?
     @Published private(set) var accessibilitySelectionError: AccessibilitySelectionError?
     @Published private(set) var isPreparingAccessibilitySelection = false
+    @Published private(set) var selectionClipboardFallbackIsEnabled: Bool
     @Published private(set) var screenshotPreviewData: Data?
     @Published var screenshotExtractionMode: ScreenshotExtractionMode = .gpt
     @Published private(set) var isPreparingScreenshot = false
@@ -109,6 +115,8 @@ final class RecallStore: ObservableObject {
     private let client: any RecallAPIClient
     private let clipboardService: any ClipboardCaptureServing
     private let accessibilitySelectionService: any AccessibilitySelectionServing
+    private let selectionClipboardFallbackService: any SelectionClipboardFallbackServing
+    private let selectionPreferenceUserDefaults: UserDefaults?
     private let screenshotCaptureService: any ScreenshotCaptureServing
     private let localScreenshotExtractor: any LocalScreenshotTextExtracting
     private var libraryCaptures: [Capture] = []
@@ -130,6 +138,9 @@ final class RecallStore: ObservableObject {
         client: any RecallAPIClient,
         clipboardService: any ClipboardCaptureServing,
         accessibilitySelectionService: any AccessibilitySelectionServing = SystemAccessibilitySelectionService(),
+        selectionClipboardFallbackService: any SelectionClipboardFallbackServing = SystemSelectionClipboardFallbackService(),
+        selectionClipboardFallbackIsEnabled: Bool = false,
+        selectionPreferenceUserDefaults: UserDefaults? = nil,
         screenshotCaptureService: any ScreenshotCaptureServing = SystemScreenshotCaptureService(),
         localScreenshotExtractor: any LocalScreenshotTextExtracting = AppleVisionScreenshotTextExtractor(),
         foregroundRefreshIntervalNanoseconds: UInt64 = 5_000_000_000,
@@ -140,6 +151,9 @@ final class RecallStore: ObservableObject {
         self.client = client
         self.clipboardService = clipboardService
         self.accessibilitySelectionService = accessibilitySelectionService
+        self.selectionClipboardFallbackService = selectionClipboardFallbackService
+        self.selectionClipboardFallbackIsEnabled = selectionClipboardFallbackIsEnabled
+        self.selectionPreferenceUserDefaults = selectionPreferenceUserDefaults
         self.screenshotCaptureService = screenshotCaptureService
         self.localScreenshotExtractor = localScreenshotExtractor
         self.foregroundRefreshIntervalNanoseconds = foregroundRefreshIntervalNanoseconds
@@ -149,10 +163,16 @@ final class RecallStore: ObservableObject {
     }
 
     convenience init(client: any RecallAPIClient = LiveRecallAPIClient()) {
+        let userDefaults = UserDefaults.standard
         self.init(
             client: client,
             clipboardService: SystemClipboardCaptureService(),
             accessibilitySelectionService: SystemAccessibilitySelectionService(),
+            selectionClipboardFallbackService: SystemSelectionClipboardFallbackService(),
+            selectionClipboardFallbackIsEnabled: userDefaults.bool(
+                forKey: Self.selectionClipboardFallbackUserDefaultsKey
+            ),
+            selectionPreferenceUserDefaults: userDefaults,
             screenshotCaptureService: SystemScreenshotCaptureService(),
             localScreenshotExtractor: AppleVisionScreenshotTextExtractor()
         )
@@ -421,58 +441,95 @@ final class RecallStore: ObservableObject {
         defer { isPreparingAccessibilitySelection = false }
 
         do {
-            let snapshot = try await accessibilitySelectionService.readSelection(
-                promptIfNeeded: promptIfNeeded
-            )
-            guard !Task.isCancelled else { return nil }
-            let boundedCharacterCount = snapshot.text.unicodeScalars
-                .prefix(Self.maximumSelectedTextLength + 1)
-                .count
-            guard boundedCharacterCount <= Self.maximumSelectedTextLength else {
-                clearQuickCapture()
-                let selectionError = AccessibilitySelectionError.selectionTooLong
-                accessibilitySelectionError = selectionError
-                quickCaptureError = selectionError.localizedDescription
-                notice = AppNotice(
-                    style: .warning,
-                    message: selectionError.localizedDescription
+            if selectionClipboardFallbackIsEnabled {
+                let outcome = try await accessibilitySelectionService
+                    .readSelectionForClipboardFallback(promptIfNeeded: promptIfNeeded)
+                switch outcome {
+                case let .selection(snapshot):
+                    return prepareNativeSelectionDraft(from: snapshot)
+                case let .clipboardFallback(ticket):
+                    do {
+                        let snapshot = try await selectionClipboardFallbackService
+                            .captureSelection(using: ticket)
+                        return prepareNativeSelectionDraft(from: snapshot)
+                    } catch {
+                        guard !Self.isCancellation(error), !Task.isCancelled else { return nil }
+                        let fallbackError = (error as? SelectionClipboardFallbackError)?
+                            .accessibilityError ?? .clipboardFallbackUnavailable
+                        publishAccessibilitySelectionError(fallbackError)
+                        return nil
+                    }
+                }
+            } else {
+                let snapshot = try await accessibilitySelectionService.readSelection(
+                    promptIfNeeded: promptIfNeeded
                 )
-                return nil
+                return prepareNativeSelectionDraft(from: snapshot)
             }
-            guard canPrepareNewQuickCapture() else { return nil }
-
-            invalidateScreenshotExtraction()
-            quickCaptureDraft = QuickCaptureDraft(
-                selectedText: snapshot.text,
-                sourceApplication: snapshot.sourceApplication.map {
-                    Self.prefixUnicodeScalars(
-                        $0,
-                        limit: Self.maximumSourceApplicationLength
-                    )
-                },
-                kind: .selection
-            )
-            attemptedQuickCaptureRequest = nil
-            quickCaptureError = nil
-            accessibilitySelectionError = nil
-            screenshotPreviewData = nil
-            screenshotExtractionSummary = nil
-            screenshotMediaType = "image/png"
-            return snapshot
+        } catch let selectionError as AccessibilitySelectionError {
+            guard !Task.isCancelled else { return nil }
+            publishAccessibilitySelectionError(selectionError)
+            return nil
         } catch {
             guard !Self.isCancellation(error), !Task.isCancelled else { return nil }
-            clearQuickCapture()
-            let selectionError = error as? AccessibilitySelectionError
-                ?? .selectionUnavailable
-            accessibilitySelectionError = selectionError
-            quickCaptureError = selectionError.localizedDescription
-            notice = AppNotice(style: .warning, message: selectionError.localizedDescription)
+            publishAccessibilitySelectionError(.selectionSafetyUnavailable)
             return nil
         }
     }
 
+    func setSelectionClipboardFallbackEnabled(_ isEnabled: Bool) {
+        selectionClipboardFallbackIsEnabled = isEnabled
+        selectionPreferenceUserDefaults?.set(
+            isEnabled,
+            forKey: Self.selectionClipboardFallbackUserDefaultsKey
+        )
+    }
+
     func accessibilityAccessIsGranted(promptIfNeeded: Bool = false) async -> Bool {
         await accessibilitySelectionService.isTrusted(promptIfNeeded: promptIfNeeded)
+    }
+
+    private func prepareNativeSelectionDraft(
+        from snapshot: AccessibilitySelectionSnapshot
+    ) -> AccessibilitySelectionSnapshot? {
+        guard !Task.isCancelled else { return nil }
+        let boundedCharacterCount = snapshot.text.unicodeScalars
+            .prefix(Self.maximumSelectedTextLength + 1)
+            .count
+        guard boundedCharacterCount <= Self.maximumSelectedTextLength else {
+            publishAccessibilitySelectionError(.selectionTooLong)
+            return nil
+        }
+        guard canPrepareNewQuickCapture() else { return nil }
+
+        invalidateScreenshotExtraction()
+        quickCaptureDraft = QuickCaptureDraft(
+            selectedText: snapshot.text,
+            sourceApplication: snapshot.sourceApplication.map {
+                Self.prefixUnicodeScalars(
+                    $0,
+                    limit: Self.maximumSourceApplicationLength
+                )
+            },
+            kind: .selection,
+            selectionCaptureMethod: snapshot.captureMethod
+        )
+        attemptedQuickCaptureRequest = nil
+        quickCaptureError = nil
+        accessibilitySelectionError = nil
+        screenshotPreviewData = nil
+        screenshotExtractionSummary = nil
+        screenshotMediaType = "image/png"
+        return snapshot
+    }
+
+    private func publishAccessibilitySelectionError(
+        _ selectionError: AccessibilitySelectionError
+    ) {
+        clearQuickCapture()
+        accessibilitySelectionError = selectionError
+        quickCaptureError = selectionError.localizedDescription
+        notice = AppNotice(style: .warning, message: selectionError.localizedDescription)
     }
 
     @discardableResult

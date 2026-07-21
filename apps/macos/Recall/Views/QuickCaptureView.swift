@@ -137,7 +137,7 @@ struct QuickCaptureView: View {
             }
 
             HStack {
-                Text(captureFooter(for: draft.kind))
+                Text(captureFooter(for: draft))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -258,6 +258,12 @@ struct QuickCaptureView: View {
                         openAccessibilitySettings()
                     }
                 }
+                if store.accessibilitySelectionError == .selectionUnavailable,
+                   !store.selectionClipboardFallbackIsEnabled {
+                    SettingsLink {
+                        Text("Open Selection Settings")
+                    }
+                }
                 if store.accessibilitySelectionError != nil {
                     Button("Capture Current Clipboard") {
                         captureCoordinator.prepareClipboardCapture()
@@ -287,14 +293,19 @@ struct QuickCaptureView: View {
         }
     }
 
-    private func captureFooter(for kind: QuickCaptureDraft.Kind) -> String {
-        switch kind {
+    private func captureFooter(for draft: QuickCaptureDraft) -> String {
+        switch draft.kind {
         case .selection:
-            "Recall saves only this source selection and your optional note before AI processing begins."
+            if draft.selectionCaptureMethod == .clipboardFallback {
+                return "This app required two matching temporary Copies. Recall restored the "
+                    + "previous clipboard on a best-effort basis; clipboard history apps may "
+                    + "still record the selection."
+            }
+            return "Recall saves only this source selection and your optional note before AI processing begins."
         case .clipboard:
-            "Your clipboard text and optional note are saved before AI processing begins."
+            return "Your clipboard text and optional note are saved before AI processing begins."
         case .screenshot:
-            "Recall saves only the extracted source text and your optional note; closing clears the temporary image."
+            return "Recall saves only the extracted source text and your optional note; closing clears the temporary image."
         }
     }
 
