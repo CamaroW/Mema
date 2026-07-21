@@ -92,6 +92,30 @@ struct ShortcutSettingsView: View {
                 )
             }
 
+            Section {
+                Toggle(
+                    "Analyze new image notes with AI",
+                    isOn: $store.imageAnalysisIsEnabled
+                )
+                Text(
+                    "When enabled, Recall saves the original screenshot locally first, "
+                        + "then sends it to the configured GPT service for background OCR "
+                        + "and visual understanding. The generated text, description, and "
+                        + "tags make the image searchable. You can override this choice in "
+                        + "the screenshot window before each save. Provider data policies "
+                        + "apply whenever analysis is enabled."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } header: {
+                Text("Image notes")
+            } footer: {
+                Text(
+                    "Turning this off prevents new image notes from being sent for analysis. "
+                        + "Existing images and previously generated annotations are unchanged."
+                )
+            }
+
             if let errorMessage = shortcutCenter.errorMessage {
                 Section {
                     Label(errorMessage, systemImage: "exclamationmark.triangle.fill")

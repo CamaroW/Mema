@@ -32,19 +32,21 @@ clarifications are recorded in [`docs/decisions.md`](docs/decisions.md).
 ## Core workflow
 
 ```text
-Capture source text and an optional user note
+Capture source text or one original image, plus an optional user note
 → persist the original Capture immediately
-→ enrich it asynchronously with Structured Outputs
+→ optionally enrich it asynchronously with Structured Outputs
 → generate an embedding from the stable §12.1 text projection
 → retrieve it through keyword and semantic search
 ```
 
-The screenshot-note addition follows the same pipeline: select a screen region,
-choose the default **GPT · Cloud** extractor or **Apple Vision · On device**,
-then explicitly extract source text and optionally add the personal context only
-you know. Those remain separate Capture fields. Recall never writes screenshot
-bytes to SQLite; the macOS selection tool uses a random OS temporary PNG that is
-removed in the normal flow, and closing the draft clears its in-memory preview.
+After selecting a screen region, choose **Text note** to keep the D-027 workflow:
+extract with **GPT · Cloud** or **Apple Vision · On device**, review the result,
+and save only text plus your separate note. Choose **Image note** to preserve the
+original image and optionally add a note. Image analysis is off by default. If
+you opt in, background OCR and visual understanding add searchable derived
+metadata; if you leave it off, the image never goes to OpenAI and remains a
+normal local image memory. SQLite stores attachment metadata, not image blobs;
+original bytes live in the application-owned attachments directory.
 
 ## Start the backend
 
@@ -53,9 +55,9 @@ recommended clean-start command creates or repairs the local environment, checks
 configuration and dependencies, starts the service, waits for health, and prints
 the local engineering URLs:
 
-> **Migration 003 boundary:** the screenshot build upgrades an existing database
-> on first start. Preserve a pre-upgrade database backup before starting this
-> version; the matching code rollback point is
+> **Migration 004 boundary:** the image-note build adds attachment metadata on
+> first start. Preserve a pre-upgrade database backup before starting this
+> version; migration 003's matching historical rollback point is
 > `rollback/pre-screenshot-ocr`. See the backend README before replacing or
 > moving a database.
 
@@ -252,7 +254,16 @@ is never logged, persisted, or sent to the backend. The current host suite passe
 merge; rich text, image, Finder-file, and race cases remain release-regression
 coverage rather than an open merge gate.
 
-Final regression also passes 215 backend tests, 44/44 stress scenarios, and
+D-037 adds the first persisted image-note vertical slice on
+`codex/image-notes`. A screenshot draft can save one original PNG with a
+separate note, display it in library/detail views, delete it with its local
+file, and—only with explicit opt-in—run background OCR plus visual indexing into
+the existing search fields. Provider errors keep the original safe and support
+the ordinary **Retry AI** action. Automated verification currently passes 233
+backend and 156 macOS tests; signed real-device image/AI acceptance remains the
+feature's final gate.
+
+The preceding integrated baseline also passes 44/44 stress scenarios and
 68/68 Chrome-extension tests.
 
 Live verification covers provider-off keyword fallback, real OpenAI enrichment

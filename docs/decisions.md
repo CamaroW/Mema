@@ -49,6 +49,7 @@ addition made beyond [`product-plan.md`](product-plan.md).
 | D-033 | Deterministic Chrome action-popup dimensions | Reliability safeguard | Implemented; 68/68 tests and real-Chrome selected/metadata layouts pass |
 | D-034 | User-triggered native Accessibility selection capture | Addition | Implemented; 108/108 host tests and primary-path user acceptance pass |
 | D-035 | Opt-in transactional clipboard fallback for native selection | Compatibility/privacy safeguard | Implemented; 149/149 host tests and user WeChat acceptance pass |
+| D-037 | Persisted image notes with opt-in background visual indexing | Addition | Implemented on `codex/image-notes`; automated verification passes, real-device acceptance pending |
 
 ## D-001 — Localhost monorepo architecture
 
@@ -1010,6 +1011,54 @@ be described as lossless, guaranteed, or private from clipboard observers.
 Application-scoped fallback also cannot prove per-control safety when a
 custom-drawn app omits those attributes; it remains opt-in and equivalent to the
 user explicitly asking Recall to perform Copy in that verified frontmost app.
+
+## D-037 — Persisted image notes with opt-in background visual indexing
+
+- Classification: Addition approved by user direction
+- Status: Implemented on `codex/image-notes`; automated verification passes and
+  real-device acceptance is pending
+- Product impact: A screenshot can now remain an image memory with an optional
+  note instead of existing only as transient OCR input
+- Schedule impact: Crosses macOS, API, persistence, enrichment, search,
+  migration, deletion, and privacy boundaries
+
+D-027 remains the explicit **Text note** path: its temporary screenshot is
+discarded after GPT or Apple Vision extraction, and the user reviews text before
+saving. D-037 adds a separate **Image note** choice to the same screenshot
+review. Its original PNG is saved immediately as the authoritative source and
+its optional user note remains an independent field. V1 accepts exactly one PNG
+or JPEG per Capture, up to 8 MiB, 20,000 pixels per dimension, and 40
+megapixels. Attachment metadata lives in a normalized
+`capture_attachments` table while immutable bytes live under a configurable,
+application-owned directory beside the database by default; SQLite stores no
+image blob or user-controlled filesystem path.
+
+Image analysis is opt-in and off by default. A persisted global setting controls
+the default and the image-note draft exposes the choice before save. With it
+off, no image bytes are sent to OpenAI and the note is immediately usable as an
+ordinary local image memory. With it on, Recall first commits the original and
+then performs one background multimodal Structured Outputs request. OCR is
+stored in the existing `selected_text` field; visual title, summary, concepts,
+entities, tags, caveats, and search aliases use the existing AI fields. This
+preserves original/user/AI separation and lets FTS and semantic retrieval index
+both visible words and non-text visual meaning without a second search system.
+AI output is derived metadata only and never replaces the image. The Responses
+request explicitly uses `store: false`; this avoids Recall creating reusable
+server-side response state but does not supersede the provider's data policies.
+
+The attachment API returns an opaque loopback content path, never a filesystem
+path. Upload type/signature, dimensions, and byte bounds are validated before
+storage; random UUID filenames, path-containment checks, restrictive file modes,
+idempotent client IDs, and cleanup on failed or duplicate creation prevent user
+paths and retry files from leaking into persistence. Deleting a Capture removes
+its database/FTS/embedding state and referenced local image. Provider failure or
+backend restart leaves the original and note intact as a visible, retryable
+error. The first implementation deliberately reuses the existing in-process
+background-task boundary rather than introducing a queue service.
+
+D-036 is intentionally not reused here because it is already allocated by the
+independent structured-clipboard draft PR. Keeping D-037 stable prevents the two
+branches from colliding when both reach `main`.
 
 ## Pending decisions
 

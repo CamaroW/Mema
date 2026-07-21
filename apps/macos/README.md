@@ -345,11 +345,11 @@ Run the build and tests again after regeneration.
 - App sandboxing, notarization, and bundling the Python service are outside the
   current P0 Build Week scope.
 
-The original D-034 command-line suite executed 108/108 tests. With the D-035
-clipboard transaction and privacy coverage, the current suite executes 149/149
+The original D-034 command-line suite executed 108/108 tests. D-035 expanded
+clipboard transaction/privacy coverage to 149/149. D-037 now executes 156/156
 Accessibility, pasteboard, contract, networking, production Vision,
-global-shortcut, lifecycle, validation, retry, polling, store, window-placement,
-and signing-identity tests.
+global-shortcut, lifecycle, validation, image-upload/display/delete, retry,
+polling, store, window-placement, and signing-identity tests.
 
 ## Manual test matrix
 
@@ -370,6 +370,10 @@ after rerunning them on the current integrated tree.
 | Accessibility compatibility | Repeat selection capture in Safari/Chrome, selectable PDF text in Preview, and an Electron or custom-drawn control with Clipboard Compatibility Mode off. Try a password field and a selection longer than 12,000 characters. | Supported apps produce exact text and best-effort positioning. Unsupported controls fail clearly without touching the clipboard. Secure, unknown-safety, and oversized text never becomes a draft or request. |
 | Clipboard compatibility | Put known plain text, rich text, an image, and Finder files on the clipboard in turn. Enable Clipboard Compatibility Mode, select known text in WeChat, and press `Option+Shift+Command+S`. Also try no selection, a password field, rapid repeats, switching controls/apps, and manually changing the clipboard during capture. | Eligible WeChat text opens as a selection draft and discloses two temporary Copies. The prior clipboard is restored with all materialized representations in the normal path. Detected focus/payload/count races create no draft and do not attempt restoration; because macOS has no writer identity or atomic restore, verify the clipboard manually rather than claiming zero race risk. Clipboard-history tools may retain the transient selection. |
 | Global screenshot | Close the main window without quitting Recall, focus another app, and press `Option+Shift+Command+4`; cancel once and complete a region once. | The selector starts without blocking Recall. Cancellation leaves no draft or temporary PNG; a completed region opens the existing screenshot draft and disclosure UI. |
+| Local image note | Complete a screenshot, choose **Image note**, keep **Analyze image with AI** off, add a note, and save. Restart Recall and reopen it. | The original image and note appear immediately, survive restart, and display in the card/detail view. No AI-derived fields are required and the image is not sent to OpenAI. |
+| Visual image note | Enable image analysis, capture a diagram or interface whose important visual relationship is absent from its visible text, and save. Search for that relationship after processing. | The original appears before analysis completes. Background OCR/visual metadata becomes visible/searchable, and the result can match the visual concept rather than only literal OCR. |
+| Image analysis failure/retry | Save an analyzed image with OpenAI unavailable, then configure the provider and choose **Retry AI**. | The first attempt preserves the original and note in a visible error state; retry reaches `ready` without duplicating the image. |
+| Image deletion | Delete an image note from detail and confirm. Refresh and inspect the configured attachment directory. | The card, search result, metadata row, and referenced image file are gone; another note is unaffected. |
 | GPT screenshot note | Choose **Capture Screenshot Note**, select a text region, keep **GPT · Cloud**, and choose **Extract source text**. | A preview appears before upload, the UI states the cloud boundary, extracted text fills only the source field, your optional personal note stays separate, and only text is saved. |
 | Local screenshot note | Repeat with **Apple Vision · On device**, disconnect the network after the backend is already running, and extract. | Text extraction succeeds on the Mac, the UI confirms local processing, and no `/v1/ocr` request is made. Saving still uses the localhost Capture API. |
 | Screenshot cancellation/limits | Cancel region selection, close the draft while extraction is running, try a non-text image, and select enough text to exceed 12,000 characters. | Cancellation creates no draft; close clears the image and ignores a late result; no-text and oversized results remain unsaved with actionable errors and no silent truncation. |
