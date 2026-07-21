@@ -42,12 +42,22 @@ struct ShortcutSettingsView: View {
                     if isCheckingAccessibilityAccess {
                         ProgressView()
                             .controlSize(.small)
-                    } else if !accessibilityAccessIsGranted {
+                    } else if accessibilityAccessIsGranted {
+                        Button("Manage Access…") {
+                            openAccessibilitySettings()
+                        }
+                    } else {
                         Button("Request Access") {
                             requestAccessibilityAccess()
                         }
                     }
                 }
+                Text(
+                    "Accessibility permission is managed by macOS. Recall can request it "
+                        + "or open System Settings, but cannot turn it off inside the app."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
                 Divider()
 
@@ -148,6 +158,15 @@ struct ShortcutSettingsView: View {
             )
             isCheckingAccessibilityAccess = false
         }
+    }
+
+    private func openAccessibilitySettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     private func shortcutEditor(for action: GlobalShortcutAction) -> some View {

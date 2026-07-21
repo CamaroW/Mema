@@ -160,6 +160,9 @@ Accessibility selected-text attribute. **Settings > Selection access >
 Clipboard Compatibility Mode** is an off-by-default fallback for those apps.
 Permission failure, Recall itself, known secure/protected controls, oversized
 input, and cancellation before the transaction never synthesize Copy.
+The Settings permission row always shows current Accessibility status. When
+access is granted it offers **Manage Access…**, because macOS owns revocation and
+Recall cannot implement a real in-app on/off switch for that system permission.
 
 When enabled, Recall retains a ticket for the exact frontmost application whose
 selected-text lookup failed. It also binds the exact AX focused control when the
