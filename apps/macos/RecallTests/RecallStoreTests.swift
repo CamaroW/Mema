@@ -451,7 +451,8 @@ final class RecallStoreTests: XCTestCase {
             permissionService: ScreenCapturePermissionStub(
                 authorized: false,
                 requestGranted: false
-            )
+            ),
+            codeSigningIdentityService: CodeSigningIdentityStub(isStable: true)
         )
 
         do {
@@ -972,6 +973,12 @@ private struct ScreenCapturePermissionStub: ScreenCapturePermissionServing {
 
     func isAuthorized() -> Bool { authorized }
     func requestAccess() -> Bool { requestGranted }
+}
+
+private struct CodeSigningIdentityStub: CodeSigningIdentityServing {
+    let isStable: Bool
+
+    var hasStablePrivacyIdentity: Bool { isStable }
 }
 
 private struct LocalExtractorStub: LocalScreenshotTextExtracting {

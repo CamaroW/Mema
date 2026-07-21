@@ -1,0 +1,10 @@
+// Portable fallback for CI and contributors who have not configured a local
+// Apple Development team. Privacy permissions do not persist across rebuilds
+// while this ad-hoc identity is active.
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+// Keep developer-specific Team IDs out of the shared repository. Values in
+// this optional file override the fallback settings above.
+#include? "Signing.local.xcconfig"

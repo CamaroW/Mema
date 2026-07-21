@@ -24,9 +24,13 @@ split; they are no longer assignment gates.
 - D-030 browser context and long-detail-view hardening was merged through PR #9
   at `0c1083e`. Chrome temporarily omits surrounding context; existing stored
   context remains intact and is display-bounded in the macOS detail view.
-- D-031 native global capture is implemented. Its 68/68 macOS tests and bounded
-  real-UI checks pass; physical hotkey delivery and actual region selection
-  remain a manual gate for the normally signed build.
+- D-031 native global capture is merged through PR #10 at `0ab687b`. Its 68/68
+  macOS tests and bounded real-UI checks pass.
+- D-032 addresses the discovered Screen Recording identity failure: ad-hoc
+  rebuilds receive build-specific designated requirements, so an enabled stale
+  Recall entry may not authorize the current process. Stable local signing,
+  app-specific reauthorization, and permission persistence across a rebuild are
+  now live-verified; the macOS suite passes 70/70.
 - The macOS app and Chrome extension are separate clients of the loopback
   FastAPI service. The app does not yet package or start that service.
 
@@ -60,17 +64,24 @@ not approval from a particular historical developer role.
    app, and source review are complete. PR #9 passed all required checks and
    merged at `0c1083e`. Deterministic suites pass 68/68 for Chrome and 48/48 for
    the D-030 macOS checkpoint.
-3. **Native global capture and menu-bar availability — current; implemented,
-   awaiting the signed-build manual gate.** D-031 registers configurable global
-   screenshot and clipboard shortcuts through Carbon without Accessibility or
-   Input Monitoring permission. A normal Dock app and its existing menu-bar
-   extra share one application-level coordinator, so capture is designed to
-   remain available after the main window closes. Transactional registration,
-   draft preservation, asynchronous screenshot waiting/PNG reads, cancellation,
-   and temporary-file cleanup are implemented. Twenty new tests bring the
-   host-verified macOS suite to 68/68. The app must be running; launch at login
-   remains a separate opt-in improvement. Final acceptance must use the normally
-   signed build for actual physical hotkeys and real screenshot-region selection.
+3. **Native global capture and stable Screen Recording identity — complete and
+   live-verified.** D-031 registers
+   configurable global screenshot and clipboard shortcuts through Carbon
+   without Accessibility or Input Monitoring permission. A normal Dock app and
+   its existing menu-bar extra share one application-level coordinator, so
+   capture is designed to remain available after the main window closes.
+   Transactional registration, draft preservation, asynchronous screenshot
+   waiting/PNG reads, cancellation, and temporary-file cleanup are implemented.
+   Twenty new tests bring the D-031 host-verified macOS suite to 68/68. D-032
+   adds portable signing configuration, a gitignored per-developer signing
+   override, verification of a signer-based designated requirement, and a clear
+   diagnostic for temporary signatures. The app-specific reset,
+   reauthorization, same-signer rebuild, system overlay, and cancellation now
+   pass, as do all 70 macOS tests. The real-device interaction gate also passes:
+   with Recall's main window closed and another app focused, the physical
+   screenshot shortcut completed a non-empty region, and the clipboard shortcut
+   opened Capture after text was copied. The app must be running; launch at
+   login remains a separate opt-in improvement.
 4. **Native Accessibility selection — next.** Read the focused app's selected text and
    bounds only after a user shortcut, then open capture UI near that selection.
    Keep clipboard capture as the compatibility fallback and avoid passive
@@ -142,7 +153,7 @@ The verification backend intentionally had no AI provider configured. Its later
 enrichment `error` did not invalidate the successful Capture: the persist-first
 pipeline retained the original source and note.
 
-### Native global capture — implemented; signed-build gate pending
+### Native global capture — complete and live-verified
 
 - Recall remains a normal Dock app with its existing `MenuBarExtra`; it must be
   running, but the main window may be closed.
@@ -168,17 +179,32 @@ pipeline retained the original source and note.
 - Screenshot bytes remain transient, and the existing GPT/cloud versus Apple
   Vision/on-device disclosure is unchanged. D-031 adds no API, schema, backend,
   extension, database, or image-persistence change.
-- All 68 macOS tests pass on the host, including 20 new shortcut, coordinator,
-  draft-safety, and asynchronous screenshot tests.
+- All 70 D-032 macOS tests pass on the host, including the D-031 shortcut,
+  coordinator, draft-safety, and asynchronous screenshot coverage plus the new
+  signing-identity diagnostics.
 - Real UI checks confirmed the default settings, a persisted change to
   `Option+Shift+Command+5`, restart persistence, restore-defaults, active Carbon
   registration, an exact 32-character clipboard Quick Capture, repeated-trigger
   draft preservation, and a responsive collapsed 19,144-character context
-  record. The unsigned test build also showed the explicit Screen Recording
-  permission error without changing that permission.
-- Remaining manual gate: in the normally signed build, verify physical global
-  key delivery from another app with the main window closed, then grant or
-  confirm Screen Recording permission and complete a real screenshot region.
+  record. The earlier ad-hoc test build showed the explicit Screen Recording
+  error even while System Settings retained an enabled Recall entry. Inspection
+  found no Team ID and a build-specific CDHash-only designated requirement;
+  this is the D-032 identity failure, not evidence that the user omitted the
+  permission.
+- D-032 keeps the repository portable: the tracked configuration has an ad-hoc
+  fallback, while each developer may supply an ignored local Apple Development
+  Team ID. No machine Team ID is committed, and no Screen Recording entitlement
+  is added. `CODE_SIGNING_ALLOWED=NO` remains automation-only and cannot satisfy
+  this gate.
+- Live verification quit all Recall copies, reset only the app-specific TCC
+  record, authorized the stable build, and chose **Quit & Reopen**. A same-signer
+  version-2 rebuild changed CDHash from `143035…` to `5a1b00…` while retaining
+  the Team ID and signer-based requirement. The rebuilt process launched
+  `/usr/sbin/screencapture`, displayed the system overlay, and cancelled with
+  Escape without a permission error.
+- B-014 is closed. From another app with Recall's main window closed, the
+  physical `Option+Shift+Command+4` shortcut completed a non-empty region.
+  After copying text, `Option+Shift+Command+C` opened Capture as expected.
 
 ## Deliberately deferred
 

@@ -5,9 +5,9 @@ loopback backend at `http://127.0.0.1:8765`; normal runs do not use an in-proces
 database or mock API client.
 
 The macOS client, hardened backend, and Chrome extension now live in the same
-integration tree. The current target builds and passes all 64 contract,
-networking, Vision, global-shortcut, lifecycle, validation, idempotency, and
-store tests.
+integration tree. The current D-032 target passes all 70 contract, networking,
+Vision, global-shortcut, lifecycle, validation, idempotency, store, and
+code-signing identity tests.
 
 ## Requirements
 
@@ -17,6 +17,36 @@ store tests.
   [`services/backend/README.md`](../../services/backend/README.md).
 - XcodeGen 2.45 or later only when regenerating the project. The checked-in
   `Recall.xcodeproj` opens without XcodeGen.
+- An Apple Development signing identity for interactive screenshot-permission
+  acceptance. Unsigned and ad-hoc builds remain sufficient for deterministic
+  automation that does not exercise macOS privacy authorization.
+
+## Configure stable local signing
+
+macOS Screen Recording authorization is associated with the app's code-signing
+identity, not only its display name or bundle identifier. An ad-hoc Debug build
+has a build-specific designated requirement, so System Settings can show an old
+**Recall** entry as enabled while a newly rebuilt process still fails the
+permission preflight.
+
+Before interactive screenshot testing, create the ignored local override from
+the checked-in example:
+
+```bash
+cp -n apps/macos/Config/Signing.local.xcconfig.example \
+  apps/macos/Config/Signing.local.xcconfig
+```
+
+Replace `YOUR_TEAM_ID` in the local file with the actual Team ID for the Apple
+Development certificate or team selected in Xcode. Use the certificate subject
+organizational-unit value or the Team ID shown by the Apple Developer account;
+do not assume a parenthesized certificate nickname is the Team ID. Never commit
+the local file or place a personal Team ID in `project.yml`.
+
+`Config/Signing.xcconfig` is the portable project default. It allows an ad-hoc
+fallback when no developer identity is available and optionally includes the
+ignored `Signing.local.xcconfig`. XcodeGen preserves this arrangement because
+`project.yml`, not the generated project file, declares the configuration.
 
 ## Run the app
 
@@ -53,7 +83,55 @@ stored only in the untracked root `.env`.
 
 Open `apps/macos/Recall.xcodeproj` in Xcode, select the shared **Recall** scheme
 and **My Mac**, then run with **Product > Run** (`Command-R`). The app shows a
-green **Connected** indicator after it reaches a healthy local service.
+green **Connected** indicator after it reaches a healthy local service. For
+Screen Recording acceptance, use this stably signed run after configuring the
+local override above.
+
+The equivalent stable command-line build is:
+
+```bash
+xcodebuild \
+  -project apps/macos/Recall.xcodeproj \
+  -scheme Recall \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath /tmp/recall-signed-derived-data \
+  build
+
+./scripts/verify-macos-signing.sh \
+  /tmp/recall-signed-derived-data/Build/Products/Debug/Recall.app
+```
+
+The verifier requires a valid app signature, a non-empty `TeamIdentifier`, and
+a signer-based designated requirement instead of a build-specific CDHash-only
+requirement. It rejects the preceding ad-hoc build as intended.
+
+### One-time Screen Recording migration
+
+If an earlier ad-hoc Recall entry is already enabled in System Settings, migrate
+once after producing and verifying the stable build:
+
+1. Quit every running copy of Recall.
+2. Verify the exact app bundle you intend to launch with
+   `scripts/verify-macos-signing.sh`.
+3. Reset only Recall's stale Screen Recording record:
+   `tccutil reset ScreenCapture com.recall.macos`.
+4. Launch that verified build, start a screenshot capture, and allow Recall in
+   **System Settings > Privacy & Security > Screen & System Audio Recording**.
+5. Quit and relaunch the same stably signed app, then complete and cancel a real
+   region selection. A later rebuild signed by the same identity should retain
+   authorization even though its executable CDHash changes.
+
+The reset removes Recall's existing authorization and therefore requires one
+fresh approval. It does not reset other applications. No Screen Recording
+entitlement should be added; the stable code identity and the normal macOS user
+authorization are the relevant boundaries.
+
+This migration is verified on the integration Mac. After authorizing the stable
+build at CDHash `143035…`, rebuilding with the same signer and
+`CURRENT_PROJECT_VERSION=2` produced CDHash `5a1b00…` with the same Team ID and
+signer-based requirement. The rebuilt process launched `/usr/sbin/screencapture`,
+showed the region overlay, and returned without a permission error after Escape.
 
 ## Build and test from the command line
 
@@ -66,8 +144,9 @@ host application waiting indefinitely before test completion:
 ./scripts/test-macos.sh
 ```
 
-Use the commands below when testing interactively through Xcode's normal host
-runner rather than the deterministic command-line safeguard.
+The commands below are unsigned deterministic automation variants. They are
+useful for compilation and unit-test diagnosis, but `CODE_SIGNING_ALLOWED=NO`
+must never be used to accept or verify Screen Recording permission:
 
 ```bash
 xcodebuild \
@@ -91,10 +170,12 @@ xcodebuild \
   test
 ```
 
-The same actions are available in Xcode with `Command-B` and `Command-U`. If
+Normal signed build and test actions are available in Xcode with `Command-B`
+and `Command-U` after the local signing override is configured. If
 `xcodebuild test` launches Recall but never finishes, stop that run and use
 `./scripts/test-macos.sh`; D-026 and E-045 record the verified Xcode 26.6
-workaround.
+workaround. That fallback intentionally proves deterministic code behavior, not
+TCC authorization.
 
 ## Regenerate the Xcode project
 
@@ -182,9 +263,11 @@ Run the build and tests again after regeneration.
 - Clipboard and screenshot source-application detection is best effort. The app
   does not read active window titles or Accessibility selections.
 - Global shortcuts work only while Recall is running. Launch at login is a
-  separate future opt-in. Actual physical hotkey delivery and region selection
-  still need final manual acceptance in the normally signed build; the temporary
-  unsigned verification build did not receive Screen Recording permission.
+  separate future opt-in. Stable Screen Recording authorization now survives a
+  rebuild. Real-device acceptance also passes: with Recall's main window closed
+  and another app focused, the physical screenshot shortcut completed a
+  non-empty region, and the clipboard shortcut opened Capture after copying
+  text.
 - Persistence belongs to the backend SQLite database. The app has no offline
   write queue.
 - An abrupt backend exit can interrupt in-process enrichment. On the next
@@ -193,8 +276,9 @@ Run the build and tests again after regeneration.
 - App sandboxing, notarization, and bundling the Python service are outside the
   current P0 Build Week scope.
 
-The current command-line suite executes 68 contract, networking, production
-Vision, global-shortcut, lifecycle, validation, retry, polling, and store tests.
+The D-032 command-line suite executes 70/70 contract, networking, production
+Vision, global-shortcut, lifecycle, validation, retry, polling, store, and
+signing-identity tests.
 
 ## Manual test matrix
 

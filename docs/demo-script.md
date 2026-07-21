@@ -9,16 +9,24 @@ presented as stored memories: only reviewed text enters Recall.
 
 1. Run `./scripts/dev.sh`, confirm `/health` is healthy, and verify the untracked
    `OPENAI_API_KEY` has model access.
-2. Launch Recall and confirm **Connected · AI ready**.
-3. Put this high-contrast text on screen for the screenshot region:
+2. Build Recall with the gitignored local Apple Development signing override,
+   then run `./scripts/verify-macos-signing.sh` against that exact app bundle.
+   Do not use a `CODE_SIGNING_ALLOWED=NO` automation build for this rehearsal.
+3. If this Mac still has an older ad-hoc Recall permission row, quit every
+   Recall copy, run `tccutil reset ScreenCapture com.recall.macos`, launch the
+   verified build, authorize it once, then quit and relaunch it.
+4. Launch Recall and confirm **Connected · AI ready**.
+5. Put this high-contrast text on screen for the screenshot region:
 
    > Keep screenshot images transient. Save only reviewed text and personal
    > context into the searchable memory pipeline.
 
-4. Prepare a second region with `Recall Local Vision 2026` for the locality
+6. Prepare a second region with `Recall Local Vision 2026` for the locality
    comparison.
-5. Complete one private rehearsal. Grant macOS Screen Recording permission if
-   prompted, then relaunch Recall before recording.
+7. Repeat the physical screenshot shortcut from another app and drag a non-empty
+   region as a private pre-demo rehearsal. D-032 verifies that permission
+   survives a same-signer rebuild, and B-014 already records a successful
+   real-device interaction.
 
 ## Timed walkthrough
 
@@ -35,13 +43,13 @@ presented as stored memories: only reviewed text enters Recall.
 
 ## Optional D-031 global-capture pickup
 
-Use this only after B-014 is closed in the normally signed build. Before the
-recording, close Recall's main window without quitting, focus another app, and
-physically verify both default shortcuts: `Option+Shift+Command+4` for the
-screenshot selector and `Option+Shift+Command+C` for clipboard Quick Capture.
-Confirm Screen Recording permission and complete one real region selection.
+The current stable build has closed B-014: with Recall's main window closed and
+another app focused, `Option+Shift+Command+4` completed a non-empty screenshot
+region, and `Option+Shift+Command+C` opened clipboard Quick Capture after text
+was copied. Before recording, repeat both checks as a private rehearsal and
+confirm Screen Recording permission remains effective.
 
-After that gate passes, the 10–24 second step may begin with the screenshot
+With that gate passed, the 10–24 second step may begin with the screenshot
 shortcut instead of the menu command. Briefly show **Shortcut Settings…** only
 if there is time: the defaults, enable switches, and restore-defaults action are
 more useful than describing Carbon. If either physical shortcut or the system
@@ -52,7 +60,8 @@ not claim the global-key flow was demonstrated.
 
 | Failure | Safe recovery | Truthful narration |
 | --- | --- | --- |
-| macOS does not show region selection | Open System Settings → Privacy & Security → Screen Recording, allow Recall, relaunch, and use the backup recording if the delay exceeds 15 seconds. | “Interactive screen selection requires the normal macOS recording permission.” |
+| macOS reports permission missing and Recall is disabled in System Settings | Open **Privacy & Security > Screen & System Audio Recording**, allow the verified Recall build, relaunch, and use the backup recording if the delay exceeds 15 seconds. | “Interactive screen selection requires normal macOS recording permission.” |
+| System Settings shows Recall enabled but capture still reports permission missing | Stop the demo path. Verify the running bundle with `scripts/verify-macos-signing.sh`; if it is temporary/ad-hoc, rebuild with the local Apple Development identity. Quit all Recall copies, reset only `ScreenCapture` for `com.recall.macos`, reauthorize the verified app once, and relaunch. | “This build did not match the older permission identity, so I am using the stable signed build rather than claiming the toggle alone is sufficient.” |
 | GPT returns `openai_not_configured` or another stable OCR error | Switch the same draft to **Apple Vision · On device** and extract locally; do not claim GPT succeeded. | “The cloud extractor is unavailable, so Recall keeps the screenshot draft local and offers the on-device path.” |
 | No text is found | Select the prepared high-contrast region again. | “Recall does not fabricate a note when an extractor finds no usable text.” |
 | Extracted text exceeds the source limit | Capture a smaller region. Never accept a silently truncated result. | “One extracted source is bounded to 12,000 characters so the reviewed text is preserved exactly.” |
